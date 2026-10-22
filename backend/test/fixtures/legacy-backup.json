@@ -1,0 +1,592 @@
+{
+ "username": "legacylifter",
+ "email": "legacy@example.com",
+ "name": "Legacy Lifter",
+ "backendAuth": false,
+ "profile": {
+  "sex": "male",
+  "age": 19,
+  "heightCm": 175,
+  "weightKg": 57,
+  "activity": "1.55",
+  "goal": "bulk",
+  "diet": "veg"
+ },
+ "targets": {
+  "calories": 2739,
+  "protein": 108,
+  "carbs": 406,
+  "fat": 76,
+  "bmr": 1574,
+  "tdee": 2439
+ },
+ "splitType": "Custom",
+ "routine": {
+  "Chest & Shoulder": [
+   "ex4",
+   "ex7",
+   "ex27",
+   "ex113",
+   "ex108"
+  ],
+  "Back": [
+   "ex15",
+   "ex19",
+   "ex108",
+   "ex113"
+  ],
+  "Arms": [
+   "ex46",
+   "ex47",
+   "ex36",
+   "ex37"
+  ],
+  "Legs": [
+   "ex57",
+   "ex67",
+   "ex85"
+  ],
+  "Rest": []
+ },
+ "workoutLogs": [
+  {
+   "date": "2026-08-22",
+   "day": "Chest & Shoulder",
+   "exercises": [
+    {
+     "exId": "ex4",
+     "sets": [
+      {
+       "reps": 6,
+       "weight": 22.5
+      },
+      {
+       "reps": 5,
+       "weight": 22.5
+      },
+      {
+       "reps": 5,
+       "weight": 20
+      }
+     ]
+    },
+    {
+     "exId": "ex7",
+     "sets": [
+      {
+       "reps": 12,
+       "weight": 45
+      },
+      {
+       "reps": 11,
+       "weight": 45
+      },
+      {
+       "reps": 10,
+       "weight": 45
+      }
+     ]
+    },
+    {
+     "exId": "ex27",
+     "sets": [
+      {
+       "reps": 10,
+       "weight": 10
+      },
+      {
+       "reps": 8,
+       "weight": 10
+      },
+      {
+       "reps": 10,
+       "weight": 7.5
+      }
+     ]
+    },
+    {
+     "exId": "ex113",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      }
+     ]
+    },
+    {
+     "exId": "ex108",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 10,
+       "weight": 20
+      },
+      {
+       "reps": 10,
+       "weight": 15
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "date": "2026-08-23",
+   "day": "Back",
+   "exercises": [
+    {
+     "exId": "ex15",
+     "sets": [
+      {
+       "reps": 7,
+       "weight": 52.5
+      },
+      {
+       "reps": 8,
+       "weight": 42.5
+      },
+      {
+       "reps": 7,
+       "weight": 42.5
+      }
+     ]
+    },
+    {
+     "exId": "ex19",
+     "sets": [
+      {
+       "reps": 10,
+       "weight": 20
+      },
+      {
+       "reps": 8,
+       "weight": 20
+      },
+      {
+       "reps": 7,
+       "weight": 20
+      }
+     ]
+    },
+    {
+     "exId": "ex113",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      }
+     ]
+    },
+    {
+     "exId": "ex108",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 15,
+       "weight": 20
+      },
+      {
+       "reps": 10,
+       "weight": 15
+      },
+      {
+       "reps": 10,
+       "weight": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "date": "2026-08-24",
+   "day": "Arms",
+   "exercises": [
+    {
+     "exId": "ex46",
+     "sets": [
+      {
+       "reps": 10,
+       "weight": 42.5
+      },
+      {
+       "reps": 8,
+       "weight": 42.5
+      },
+      {
+       "reps": 7,
+       "weight": 42.5
+      }
+     ]
+    },
+    {
+     "exId": "ex47",
+     "sets": [
+      {
+       "reps": 6,
+       "weight": 25
+      },
+      {
+       "reps": 6,
+       "weight": 25
+      },
+      {
+       "reps": 6,
+       "weight": 25
+      }
+     ]
+    },
+    {
+     "exId": "ex36",
+     "sets": [
+      {
+       "reps": 8,
+       "weight": 20
+      },
+      {
+       "reps": 8,
+       "weight": 20
+      },
+      {
+       "reps": 8,
+       "weight": 20
+      }
+     ]
+    },
+    {
+     "exId": "ex37",
+     "sets": [
+      {
+       "reps": 6,
+       "weight": 37.5
+      },
+      {
+       "reps": 6,
+       "weight": 37.5
+      },
+      {
+       "reps": 6,
+       "weight": 37.5
+      }
+     ]
+    },
+    {
+     "exId": "ex113",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      }
+     ]
+    },
+    {
+     "exId": "ex108",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 10,
+       "weight": 20
+      },
+      {
+       "reps": 10,
+       "weight": 15
+      },
+      {
+       "reps": 10,
+       "weight": 10
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "date": "2026-08-25",
+   "day": "Legs",
+   "exercises": [
+    {
+     "exId": "ex57",
+     "sets": [
+      {
+       "reps": 12,
+       "weight": 40
+      },
+      {
+       "reps": 10,
+       "weight": 70
+      },
+      {
+       "reps": 10,
+       "weight": 70
+      },
+      {
+       "reps": 9,
+       "weight": 70
+      }
+     ]
+    },
+    {
+     "exId": "ex67",
+     "sets": [
+      {
+       "reps": 10,
+       "weight": 37.5
+      },
+      {
+       "reps": 9,
+       "weight": 37.5
+      },
+      {
+       "reps": 8,
+       "weight": 37.5
+      }
+     ]
+    },
+    {
+     "exId": "ex85",
+     "sets": [
+      {
+       "reps": 10,
+       "weight": 20
+      },
+      {
+       "reps": 9,
+       "weight": 20
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "date": "2026-08-27",
+   "day": "Chest & Shoulder",
+   "exercises": [
+    {
+     "exId": "ex4",
+     "sets": [
+      {
+       "reps": 7,
+       "weight": 22.5
+      },
+      {
+       "reps": 6,
+       "weight": 22.5
+      },
+      {
+       "reps": 7,
+       "weight": 22.5
+      }
+     ]
+    },
+    {
+     "exId": "ex7",
+     "sets": [
+      {
+       "reps": 10,
+       "weight": 45
+      },
+      {
+       "reps": 8,
+       "weight": 45
+      },
+      {
+       "reps": 8,
+       "weight": 45
+      }
+     ]
+    },
+    {
+     "exId": "ex27",
+     "sets": [
+      {
+       "reps": 12,
+       "weight": 10
+      },
+      {
+       "reps": 9,
+       "weight": 10
+      },
+      {
+       "reps": 9,
+       "weight": 10
+      }
+     ]
+    },
+    {
+     "exId": "ex113",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 10
+      },
+      {
+       "reps": 26,
+       "weight": 10
+      },
+      {
+       "reps": 30,
+       "weight": 10
+      }
+     ]
+    },
+    {
+     "exId": "ex108",
+     "sets": [
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 30,
+       "weight": 15
+      },
+      {
+       "reps": 10,
+       "weight": 20
+      },
+      {
+       "reps": 10,
+       "weight": 15
+      },
+      {
+       "reps": 10,
+       "weight": 10
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "mealLogs": [
+  {
+   "uid": "1756000000000_abc",
+   "date": "2026-08-25",
+   "meal": "Lunch",
+   "foodId": "fd3",
+   "name": "Paneer",
+   "servings": 1,
+   "qtyUnit": "serving",
+   "qtyAmount": 1,
+   "cal": 265,
+   "p": 18,
+   "c": 3.6,
+   "f": 20
+  },
+  {
+   "uid": "1756000000001_def",
+   "date": "2026-08-25",
+   "meal": "Dinner",
+   "foodId": null,
+   "name": "Mom's dal",
+   "servings": 1,
+   "qtyUnit": "custom",
+   "qtyAmount": 1,
+   "cal": 320,
+   "p": 14,
+   "c": 40,
+   "f": 8
+  }
+ ],
+ "stepLogs": [
+  {
+   "date": "2026-08-25",
+   "steps": 7200
+  },
+  {
+   "date": "2026-08-26",
+   "steps": 10300
+  }
+ ],
+ "onboarded": true,
+ "createdAt": 1787326838897,
+ "coachChat": [
+  {
+   "who": "coach",
+   "text": "Hey Krishna \ud83d\udc4b I'm Coach Byte. I don't run on some far-away server \u2014 I just read your logs on this device and keep you honest. Log your first workout and I'll start tracking your consistency. Ask me about your <b>workouts</b>, <b>diet</b>, or <b>progress</b> any time \u2014 I'll answer from your real logs."
+  },
+  {
+   "who": "user",
+   "text": "Hi"
+  },
+  {
+   "who": "coach",
+   "text": "Hey Krishna! You're on a 3-day streak. Ask me about your <b>workouts</b>, <b>diet</b>, or <b>progress</b>."
+  },
+  {
+   "who": "user",
+   "text": "How am I doing"
+  },
+  {
+   "who": "coach",
+   "text": "Overall: 3-day streak, 3 workouts logged (~3/week), averaging 0g protein/day recently. Ask me about <b>workouts</b>, <b>diet</b>, <b>progress</b>, or just tell me how you're feeling."
+  }
+ ],
+ "dietPlan": {
+  "items": [
+   {
+    "id": "dp0",
+    "text": "Oats with milk"
+   },
+   {
+    "id": "dp1",
+    "text": "Paneer bhurji"
+   }
+  ],
+  "updatedAt": 1756000000000
+ },
+ "dietPlanChecks": {
+  "2026-08-25": {
+   "dp0": true
+  }
+ },
+ "customExercises": [
+  {
+   "id": "custom_1755_42",
+   "n": "Landmine Press",
+   "m": "Shoulders",
+   "type": "Custom"
+  }
+ ]
+}

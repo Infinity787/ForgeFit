@@ -1,0 +1,13 @@
+{
+  "appId": "com.forgefit.app",
+  "appName": "ForgeFit",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true,
+    "allowNavigation": ["*"]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
