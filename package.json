@@ -4,10 +4,11 @@
   "description": "ForgeFit web app / PWA and Capacitor Android wrapper. API lives in backend/.",
   "main": "sw.js",
   "scripts": {
-    "test": "node --test \"tests/*.test.js\" && npm --prefix backend test",
-    "test:client": "node --test \"tests/*.test.js\"",
-    "sync:web": "cp index.html sw.js manifest.json www/ && cp -R icons www/",
-    "android:copy": "npm run sync:web && npx cap copy android"
+    "test": "npm run test:client && npm run test:api",
+    "test:client": "node --test --test-concurrency=1 \"tests/*.test.js\"",
+    "sync:web": "cp index.html sw.js manifest.json vercel.json www/ && cp -R icons www/",
+    "android:copy": "npm run sync:web && npx cap copy android",
+    "test:api": "node --test --test-concurrency=1 \"tests/api-*.test.mjs\""
   },
   "keywords": [],
   "author": "",
@@ -19,9 +20,12 @@
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/share": "^8.0.1"
   },
   "devDependencies": {
-    "jsdom": "^26.1.0"
+    "hono": "^4.13.13",
+    "jsdom": "^26.1.0",
+    "pg": "^8.23.1"
   }
 }

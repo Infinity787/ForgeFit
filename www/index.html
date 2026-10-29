@@ -607,6 +607,9 @@ input[type=checkbox]{accent-color:var(--fg);}
 .collapse__body{padding:4px 20px 20px;}
 
 /* photo estimate */
+.day-row{-webkit-appearance:none;appearance:none;width:100%;display:grid;grid-template-columns:86px minmax(0,1fr) 84px 16px;gap:10px;align-items:center;
+  padding:9px 6px;border:0;border-radius:9px;background:transparent;cursor:pointer;text-align:left;color:var(--fg-3);}
+.day-row:hover{background:var(--tint);}
 .photo-pick{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .photo-pick label,.photo-pick button{
   display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:18px;border-radius:var(--radius);
@@ -769,8 +772,8 @@ input[type=checkbox]{accent-color:var(--fg);}
         <div id="fpStep2" class="hidden">
           <div id="fpOtpBanner"></div>
           <div class="field">
-            <label for="fpOtp">6-digit code</label>
-            <input id="fpOtp" class="input--otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="······">
+            <label for="fpOtp">Code from the email</label>
+            <input id="fpOtp" class="input--otp" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="······">
           </div>
           <div class="error-text" id="fpStep2Error" role="alert"></div>
           <button type="button" class="btn btn--primary btn--block" id="fpVerifyBtn">Verify code</button>
@@ -807,8 +810,8 @@ input[type=checkbox]{accent-color:var(--fg);}
         <div id="signupStep2" class="hidden">
           <div id="suOtpBanner"></div>
           <div class="field">
-            <label for="suOtp">6-digit code</label>
-            <input id="suOtp" class="input--otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="······">
+            <label for="suOtp">Code from the email</label>
+            <input id="suOtp" class="input--otp" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="······">
           </div>
           <div class="error-text" id="suOtpError" role="alert"></div>
           <button type="button" class="btn btn--primary btn--block" id="suVerifyOtpBtn">Verify code</button>
@@ -838,7 +841,6 @@ input[type=checkbox]{accent-color:var(--fg);}
         <div class="stack">
           <p class="muted small">Load a ForgeFit backup on this device. After you log in or create an account, you’ll be asked to import it — nothing is merged until you confirm.</p>
           <button type="button" class="btn btn--ghost btn--sm btn--block" id="importPickBtn"><svg class="i i--sm"><use href="#i-upload"/></svg>Choose backup file</button>
-          <button type="button" class="btn btn--ghost btn--sm btn--block" onclick="importFromBundled();"><svg class="i i--sm"><use href="#i-history"/></svg>Restore the backup bundled with this app</button>
           <textarea id="importPasteArea" class="input" rows="3" placeholder="…or paste backup JSON here" style="font-family:var(--mono);font-size:12px;min-height:76px;"></textarea>
           <button type="button" class="btn btn--ghost btn--sm btn--block" onclick="importFromPaste();">Load pasted backup</button>
           <div class="error-text" id="importAuthError" role="alert"></div>
@@ -933,8 +935,9 @@ input[type=checkbox]{accent-color:var(--fg);}
           <div class="split-card" data-split="Custom" role="radio" tabindex="0" aria-checked="false" style="grid-column:1/-1;"><b>Other</b><span>Running your own split? Name your own days.</span></div>
         </div>
         <div class="field" id="customDaysField" style="display:none;margin-top:16px;">
-          <label for="obCustomDays">Your training days, comma separated</label>
-          <input id="obCustomDays" placeholder="Chest &amp; Triceps, Back &amp; Biceps, Legs, Shoulders &amp; Abs">
+          <label for="obCustomDays">Your days in order, comma separated</label>
+          <input id="obCustomDays" placeholder="Push, Pull, Legs, Rest, Upper, Lower, Rest">
+          <div class="field-hint">Write <b>Rest</b> for each rest day, where it falls in your week. Rest days keep your streak going and aren’t counted as workouts.</div>
         </div>
         <p class="muted" style="margin-top:14px;">You’ll choose exercises for each day in Train — this just sets up your week.</p>
       </div>
@@ -1018,6 +1021,16 @@ input[type=checkbox]{accent-color:var(--fg);}
       <button class="modal-close" onclick="closeStepsModal()" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
     <div class="modal-card__body" id="stepsModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="dayDietModal" role="dialog" aria-modal="true" aria-labelledby="dayDietTitle">
+  <div class="modal-card modal-card--wide">
+    <div class="modal-card__header">
+      <div><h3 id="dayDietTitle">Day’s diet</h3><div class="sub" id="dayDietSub">Everything you ate that day.</div></div>
+      <button class="modal-close" onclick="closeDayDiet()" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="modal-card__body" id="dayDietBody"></div>
   </div>
 </div>
 
@@ -1321,43 +1334,144 @@ const MEAL_IDEAS = {
 };
 
 /* =========================================================
-   BACKEND CONNECTION
-   All app data lives in the ForgeFit API's PostgreSQL database. This page
-   never talks to the database directly and holds no secrets: requests carry
-   only the signed-in user's session token.
-
-   On a local dev server (http://localhost:<port>) you can point the app at a
-   local API with: localStorage.setItem('forgefit_api_base', 'http://localhost:4000')
+   BACKEND CONNECTION (Supabase)
+   Accounts are Supabase Auth users; app data and AI go through the
+   ForgeFit `api` Edge Function, which checks the user's access token and
+   only ever touches that user's rows. The app never talks to the database
+   directly. The publishable key below is meant to ship in apps: on its own
+   it grants no access to any ForgeFit data.
    ========================================================= */
-const DEFAULT_API_BASE_URL = 'https://forgefit-backend-e013.onrender.com';
-const API_BASE_URL = (function(){
-  try{
-    const isDevServer = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !!location.port;
-    const override = isDevServer && localStorage.getItem('forgefit_api_base');
-    return (override || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
-  }catch(e){ return DEFAULT_API_BASE_URL; }
-})();
+const SUPABASE_PROJECTS = {
+  production: { url: 'https://yinguqbwroxpqhitikni.supabase.co', key: 'sb_publishable_t8Mr0mk3xaZXst86SSceEQ_w5Ro0TL-' },
+  staging:    { url: 'https://hlzqedfmhnjadjknhfwm.supabase.co', key: 'sb_publishable_NRRIeMzeoCSxwIEbj4phAA_K6ALJMuj' },
+};
+// Which project this build talks to.
+const FORGEFIT_BACKEND = 'production';
+const SUPABASE = SUPABASE_PROJECTS[FORGEFIT_BACKEND];
+const API_BASE_URL = SUPABASE.url + '/functions/v1';
+const AUTH_URL = SUPABASE.url + '/auth/v1';
 
-function backendEnabled(){ return !!API_BASE_URL; }
+function backendEnabled(){ return true; }
 
 class ApiError extends Error {
   constructor(message, status, opts){
     super(message);
     this.status = status || 0;
     this.offline = !!(opts && opts.offline);
+    this.code = opts && opts.code;
   }
 }
 
-// Wraps fetch with JSON handling, auth, a timeout and errors that say what
-// actually happened (offline vs. server said no). The first request after
-// the API has been idle can take ~50s while the host wakes up, hence the
-// generous default timeout.
+function offlineError(timedOut){
+  return new ApiError(
+    !navigator.onLine ? 'You’re offline. Check your connection and try again.'
+      : timedOut ? 'The server took too long to respond. Try again in a moment.'
+      : 'Couldn’t reach ForgeFit. Check your connection and try again.',
+    0, {offline:true}
+  );
+}
+
+/* ---------- Supabase Auth (REST) ---------- */
+// Friendlier wording for Supabase Auth's error codes.
+const AUTH_MESSAGES = {
+  otp_expired: 'That code has expired or is incorrect. Request a new one.',
+  over_email_send_rate_limit: 'Too many emails sent. Wait a minute, then try again.',
+  over_request_rate_limit: 'Too many attempts. Wait a minute, then try again.',
+  email_address_invalid: 'Enter a valid email address.',
+  weak_password: 'Choose a stronger password (at least 6 characters).',
+  same_password: 'That’s already your password — choose a new one.',
+  email_exists: 'That email is already registered to another account.',
+  invalid_credentials: 'Incorrect username or password.',
+  user_not_found: 'No account found for that email.',
+  signup_disabled: 'New signups are turned off right now.',
+};
+async function authRequest(path, { method = 'POST', body, token } = {}){
+  let res;
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), 30000);
+  try{
+    res = await fetch(AUTH_URL + path, {
+      method,
+      headers: Object.assign({ apikey: SUPABASE.key, 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    });
+  }catch(e){
+    throw offlineError(controller.signal.aborted);
+  }finally{
+    clearTimeout(timer);
+  }
+  let data = {};
+  try{ data = await res.json(); }catch(e){}
+  if(!res.ok){
+    const code = data.error_code || data.code || '';
+    let msg = AUTH_MESSAGES[code] || data.msg || data.message || data.error_description || ('Request failed (' + res.status + ').');
+    const wait = /after (\d+) seconds?/.exec(msg);
+    if(wait) msg = 'Please wait ' + wait[1] + ' seconds before requesting another code.';
+    throw new ApiError(msg, res.status, { code, offline: res.status >= 500 });
+  }
+  return data;
+}
+const Auth = {
+  // Sends a 6-digit code to the email (creates the Auth user if it's new).
+  sendEmailCode: (email, name) => authRequest('/otp', { body: { email, create_user: true, data: name ? { name } : undefined } }),
+  verify: (email, token, type) => authRequest('/verify', { body: { email, token, type } }),
+  sendRecoveryCode: (email) => authRequest('/recover', { body: { email } }),
+  passwordGrant: (email, password) => authRequest('/token?grant_type=password', { body: { email, password } }),
+  refresh: (refresh_token) => authRequest('/token?grant_type=refresh_token', { body: { refresh_token } }),
+  updateUser: (token, attrs) => authRequest('/user', { method: 'PUT', token, body: attrs }),
+  logout: (token, scope) => authRequest('/logout?scope=' + (scope || 'local'), { token }).catch(()=>{}),
+};
+
+// Session = {username, email, name, mode:'supabase', uid, access_token, refresh_token, expires_at(ms)}.
+function sessionFromAuth(auth, account){
+  const expiresAt = auth.expires_at ? auth.expires_at * 1000 : Date.now() + (auth.expires_in || 3600) * 1000;
+  return {
+    mode: 'supabase',
+    uid: auth.user && auth.user.id,
+    access_token: auth.access_token,
+    refresh_token: auth.refresh_token,
+    expires_at: expiresAt,
+    username: account ? account.username : undefined,
+    email: account ? account.email : (auth.user && auth.user.email),
+    name: account ? account.name : undefined
+  };
+}
+
+// Access tokens last an hour; refresh shortly before they run out.
+let refreshing = null;
+async function freshAccessToken(){
+  const s = getSession();
+  if(!s) return null;
+  if(s.expires_at - Date.now() > 60000) return s.access_token;
+  if(!refreshing){
+    refreshing = (async ()=>{
+      try{
+        const r = await Auth.refresh(s.refresh_token);
+        const cur = getSession();
+        if(cur && cur.refresh_token === s.refresh_token){
+          setSession(Object.assign({}, cur, sessionFromAuth(r), { username: cur.username, email: cur.email, name: cur.name }));
+        }
+        return r.access_token;
+      }catch(err){
+        if(!err.offline && err.status >= 400 && err.status < 500) handleSessionExpired();
+        throw err;
+      }finally{
+        refreshing = null;
+      }
+    })();
+  }
+  return refreshing;
+}
+
+// Calls the ForgeFit API with JSON handling, auth, a timeout and errors that
+// say what actually happened (offline vs. server said no).
 async function apiCall(path, body, token, method, opts){
   opts = opts || {};
   method = method || (body === undefined || body === null ? 'GET' : 'POST');
-  if(token === undefined){ const s = getSession(); token = s && s.token; }
+  if(token === undefined) token = await freshAccessToken();
   const controller = new AbortController();
-  const timer = setTimeout(()=>controller.abort(), opts.timeoutMs || 70000);
+  const timer = setTimeout(()=>controller.abort(), opts.timeoutMs || 45000);
   let res;
   try{
     res = await fetch(API_BASE_URL + path, {
@@ -1370,13 +1484,7 @@ async function apiCall(path, body, token, method, opts){
       signal: controller.signal
     });
   }catch(networkErr){
-    const timedOut = controller.signal.aborted;
-    throw new ApiError(
-      !navigator.onLine ? 'You’re offline. Check your connection and try again.'
-        : timedOut ? 'The server took too long to respond. Try again in a moment.'
-        : 'Couldn’t reach the ForgeFit server. Check your connection and try again.',
-      0, {offline:true}
-    );
+    throw offlineError(controller.signal.aborted);
   }finally{
     clearTimeout(timer);
   }
@@ -1384,7 +1492,7 @@ async function apiCall(path, body, token, method, opts){
   try{ data = await res.json(); }catch(e){}
   if(!res.ok){
     if(res.status === 401 && token && !opts.allow401) handleSessionExpired();
-    throw new ApiError(data.error || ('Request failed ('+res.status+').'), res.status, {offline: res.status === 502 || res.status === 503 || res.status === 504});
+    throw new ApiError(data.error || ('Request failed ('+res.status+').'), res.status, {offline: res.status === 502 || res.status === 503 || res.status === 504, code: data.code});
   }
   return data;
 }
@@ -1416,10 +1524,9 @@ const clone = (o) => o === undefined ? undefined : JSON.parse(JSON.stringify(o))
 
 function loadLegacyDB(){ const db = readJSON(LEGACY_DB_KEY, {}); return (db && typeof db === 'object') ? db : {}; }
 
-// Session is {username, mode:'backend', token, email, name}.
 function getSession(){
   const s = readJSON(SESSION_KEY, null);
-  return (s && s.mode === 'backend' && s.token) ? s : null;
+  return (s && s.mode === 'supabase' && s.access_token && s.username) ? s : null;
 }
 function setSession(sessionObj){ writeJSON(SESSION_KEY, sessionObj); }
 function clearSession(){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
@@ -1722,7 +1829,7 @@ async function refreshFromServer(opts){
     const r = await Sync.flush();
     if(!r.ok) return false;
   }
-  const data = await apiCall('/api/data', null, session.token, 'GET');
+  const data = await apiCall('/api/data', null, undefined, 'GET');
   const server = normalizeUser(data.state);
   const changed = !appState.user || j(appState.user) !== j(server);
   appState.user = server;
@@ -1977,11 +2084,33 @@ function renderOtpBanner(containerId, email, code){
       <div class="code">${escapeHtml(code)}</div>
     </div>` : `
     <div class="otp-banner" style="border-style:solid;">
-      <p>We sent a 6-digit code to <b>${escapeHtml(email)}</b>. It expires in 10 minutes — check spam if you don’t see it.</p>
+      <p>We sent a code to <b>${escapeHtml(email)}</b>. It expires soon — check spam if you don’t see it.</p>
     </div>`;
 }
 
 /* ---------- Sign up: email -> verify -> username + password ---------- */
+const CODE_RE = /^\d{6,10}$/;
+
+// Finishes sign-in once Supabase Auth has given us a session: loads the
+// ForgeFit account, or moves to the "choose a username" step if there isn't one.
+async function completeSignIn(auth, opts){
+  opts = opts || {};
+  const data = await apiCall('/api/account', null, auth.access_token, 'GET', {allow401:true});
+  if(!data.account){
+    pendingSignup = Object.assign(pendingSignup || {}, { auth, email: auth.user && auth.user.email, name: (pendingSignup && pendingSignup.name) || (auth.user && auth.user.user_metadata && auth.user.user_metadata.name) || '' });
+    showAuthTab('signup');
+    setSignupStep(3);
+    if(opts.fromLogin) showAuthNotice('Almost there — choose a username and password to finish setting up your account.');
+    document.getElementById('suUsername').focus();
+    return false;
+  }
+  setSession(sessionFromAuth(auth, data.account));
+  pendingSignup = null;
+  showAuthNotice('');
+  boot();
+  return true;
+}
+
 document.getElementById('suSendCodeBtn').addEventListener('click', withLoading(document.getElementById('suSendCodeBtn'), 'Sending…', async ()=>{
   const name = document.getElementById('suName').value.trim();
   const email = document.getElementById('suEmail').value.trim().toLowerCase();
@@ -1990,9 +2119,9 @@ document.getElementById('suSendCodeBtn').addEventListener('click', withLoading(d
   if(!name){ err.textContent = 'Enter your name.'; return; }
   if(!isValidEmail(email)){ err.textContent = 'Enter a valid email address.'; return; }
   try{
-    const data = await apiCall('/api/auth/signup/start', {name, email}, null);
+    await Auth.sendEmailCode(email, name);
     pendingSignup = {name, email};
-    renderOtpBanner('suOtpBanner', email, data.devCode);
+    renderOtpBanner('suOtpBanner', email, null);
   }catch(e){ err.textContent = e.message; return; }
   setSignupStep(2);
   document.getElementById('suOtp').value = '';
@@ -2002,8 +2131,7 @@ document.getElementById('suResendOtpBtn').addEventListener('click', withLoading(
   if(!pendingSignup) return;
   const err = document.getElementById('suOtpError');
   try{
-    const data = await apiCall('/api/auth/signup/start', {name: pendingSignup.name, email: pendingSignup.email}, null);
-    renderOtpBanner('suOtpBanner', pendingSignup.email, data.devCode);
+    await Auth.sendEmailCode(pendingSignup.email, pendingSignup.name);
     err.textContent = '';
     toast('New code sent.');
   }catch(e){ err.textContent = e.message; }
@@ -2013,18 +2141,19 @@ document.getElementById('suVerifyOtpBtn').addEventListener('click', withLoading(
   err.textContent = '';
   if(!pendingSignup){ err.textContent = 'Session expired — start over.'; return; }
   const entered = document.getElementById('suOtp').value.trim();
-  if(!/^\d{6}$/.test(entered)){ err.textContent = 'Enter the 6-digit code.'; return; }
+  if(!CODE_RE.test(entered)){ err.textContent = 'Enter the code from the email.'; return; }
   try{
-    const data = await apiCall('/api/auth/signup/verify', {email: pendingSignup.email, code: entered}, null);
-    pendingSignup.emailVerifiedToken = data.emailVerifiedToken;
-  }catch(e){ err.textContent = e.message; return; }
-  setSignupStep(3);
-  document.getElementById('suUsername').focus();
+    const auth = await Auth.verify(pendingSignup.email, entered, 'email');
+    pendingSignup.auth = auth;
+    // Already have a ForgeFit account with this email? Then this just signs you in.
+    const done = await completeSignIn(auth);
+    if(done) toast('You already had an account — you’re signed in.');
+  }catch(e){ err.textContent = e.message; }
 }));
 document.getElementById('suCreateBtn').addEventListener('click', withLoading(document.getElementById('suCreateBtn'), 'Creating…', async ()=>{
   const err = document.getElementById('signupPassError');
   err.textContent = '';
-  if(!pendingSignup){ err.textContent = 'Session expired — start over.'; return; }
+  if(!pendingSignup || !pendingSignup.auth){ err.textContent = 'Session expired — start over.'; return; }
   const username = document.getElementById('suUsername').value.trim().toLowerCase();
   const pass = document.getElementById('suPass').value;
   const confirm = document.getElementById('suPassConfirm').value;
@@ -2032,11 +2161,10 @@ document.getElementById('suCreateBtn').addEventListener('click', withLoading(doc
   if(pass.length < 6){ err.textContent = 'Password must be at least 6 characters.'; return; }
   if(pass !== confirm){ err.textContent = 'Passwords do not match.'; return; }
   try{
-    const data = await apiCall('/api/auth/signup/complete', {
-      emailVerifiedToken: pendingSignup.emailVerifiedToken,
-      username, password: pass, name: pendingSignup.name
-    }, null);
-    setSession({username: data.user.username, mode:'backend', token: data.token, email: data.user.email, name: data.user.name});
+    const token = pendingSignup.auth.access_token;
+    await Auth.updateUser(token, { password: pass });
+    const data = await apiCall('/api/account/setup', { username, name: pendingSignup.name || username }, token, 'POST', {allow401:true});
+    setSession(sessionFromAuth(pendingSignup.auth, data.account));
   }catch(e){ err.textContent = e.message; return; }
   pendingSignup = null;
   showAuthNotice('');
@@ -2055,10 +2183,9 @@ document.getElementById('fpSendCodeBtn').addEventListener('click', withLoading(d
   err.textContent = '';
   if(!isValidEmail(email)){ err.textContent = 'Enter a valid email address.'; return; }
   try{
-    const data = await apiCall('/api/auth/forgot/start', {email}, null);
+    await Auth.sendRecoveryCode(email);
     pendingReset = {email};
-    if(data.devCode){ renderOtpBanner('fpOtpBanner', email, data.devCode); }
-    else{ document.getElementById('fpOtpBanner').innerHTML = `<div class="otp-banner" style="border-style:solid;"><p>If <b>${escapeHtml(email)}</b> has an account, a 6-digit code is on its way.</p></div>`; }
+    document.getElementById('fpOtpBanner').innerHTML = `<div class="otp-banner" style="border-style:solid;"><p>If <b>${escapeHtml(email)}</b> has an account, a code is on its way.</p></div>`;
   }catch(e){ err.textContent = e.message; return; }
   setForgotStep(2);
   document.getElementById('fpOtp').value = '';
@@ -2068,8 +2195,7 @@ document.getElementById('fpResendBtn').addEventListener('click', withLoading(doc
   if(!pendingReset) return;
   const err = document.getElementById('fpStep2Error');
   try{
-    const data = await apiCall('/api/auth/forgot/start', {email: pendingReset.email}, null);
-    if(data.devCode) renderOtpBanner('fpOtpBanner', pendingReset.email, data.devCode);
+    await Auth.sendRecoveryCode(pendingReset.email);
     err.textContent = '';
     toast('If the account exists, a new code was sent.');
   }catch(e){ err.textContent = e.message; }
@@ -2079,10 +2205,9 @@ document.getElementById('fpVerifyBtn').addEventListener('click', withLoading(doc
   err.textContent = '';
   if(!pendingReset){ err.textContent = 'Session expired — start over.'; return; }
   const entered = document.getElementById('fpOtp').value.trim();
-  if(!/^\d{6}$/.test(entered)){ err.textContent = 'Enter the 6-digit code.'; return; }
+  if(!CODE_RE.test(entered)){ err.textContent = 'Enter the code from the email.'; return; }
   try{
-    const data = await apiCall('/api/auth/forgot/verify', {email: pendingReset.email, code: entered}, null);
-    pendingReset.resetToken = data.resetToken;
+    pendingReset.auth = await Auth.verify(pendingReset.email, entered, 'recovery');
   }catch(e){ err.textContent = e.message; return; }
   setForgotStep(3);
   document.getElementById('fpNewPass').focus();
@@ -2090,23 +2215,28 @@ document.getElementById('fpVerifyBtn').addEventListener('click', withLoading(doc
 document.getElementById('fpResetBtn').addEventListener('click', withLoading(document.getElementById('fpResetBtn'), 'Resetting…', async ()=>{
   const err = document.getElementById('fpStep3Error');
   err.textContent = '';
-  if(!pendingReset){ err.textContent = 'Session expired — start over.'; return; }
+  if(!pendingReset || !pendingReset.auth){ err.textContent = 'Session expired — start over.'; return; }
   const pass1 = document.getElementById('fpNewPass').value;
   const pass2 = document.getElementById('fpConfirmPass').value;
   if(pass1.length < 6){ err.textContent = 'New password must be at least 6 characters.'; return; }
   if(pass1 !== pass2){ err.textContent = 'Passwords do not match.'; return; }
-  let username;
+  let username = '';
   try{
-    const data = await apiCall('/api/auth/forgot/complete', {resetToken: pendingReset.resetToken, newPassword: pass1}, null);
-    username = data.username;
+    const token = pendingReset.auth.access_token;
+    await Auth.updateUser(token, { password: pass1 });
+    // Sign out every other device that had this account open.
+    await Auth.logout(token, 'others');
+    const acct = await apiCall('/api/account', null, token, 'GET', {allow401:true}).catch(()=>({}));
+    username = (acct.account && acct.account.username) || '';
+    await Auth.logout(token, 'local');
   }catch(e){ err.textContent = e.message; return; }
   pendingReset = null;
   forgotPassPanel.classList.add('hidden');
   resetForgotSteps();
-  document.getElementById('loginUsername').value = username;
+  document.getElementById('loginUsername').value = username || document.getElementById('fpEmail').value.trim();
   document.getElementById('loginPass').value = '';
   document.getElementById('loginError').textContent = '';
-  showAuthNotice('Password reset for “' + username + '”. Log in with your new password.');
+  showAuthNotice(username ? 'Password reset for “' + username + '”. Log in with your new password.' : 'Password reset. Log in with your new password.');
   document.getElementById('loginPass').focus();
 }));
 
@@ -2122,7 +2252,12 @@ loginForm.addEventListener('submit', async function(e){
     if(!username || !pass){ errEl.textContent = 'Enter your username (or email) and password.'; return; }
     try{
       const data = await apiCall('/api/auth/login', {username, password: pass}, null);
-      setSession({username: data.user.username, mode:'backend', token: data.token, email: data.user.email, name: data.user.name});
+      if(!data.account){
+        pendingSignup = { email: data.session.user && data.session.user.email };
+        await completeSignIn(data.session, {fromLogin:true});
+        return;
+      }
+      setSession(sessionFromAuth(data.session, data.account));
     }catch(e){ errEl.textContent = e.message; return; }
     showAuthNotice('');
     boot();
@@ -2153,6 +2288,7 @@ async function logout(){
   const s = getSession();
   // On a clean logout, remove this account's cached copy from the device.
   if(s && !(appState.user && Sync.pendingOps().length)) dropCacheFor(s.username);
+  if(s) Auth.logout(s.access_token, 'local');   // best effort; ends this session on the server
   clearSession();
   appState = {user:null, base:null, loaded:false};
   unloadWorkoutDraft();
@@ -2262,9 +2398,14 @@ document.getElementById('obNext').addEventListener('click', ()=>{
     } else {
       if(!onboardState.split){ onboardError('Pick a split to continue.'); return; }
       if(onboardState.split === 'Custom'){
-        const raw = document.getElementById('obCustomDays').value;
-        const days = raw.split(',').map(s=>s.trim()).filter(Boolean);
+        const days = parseDayNames(document.getElementById('obCustomDays').value);
         if(days.length===0){ onboardError('Enter at least one training day name, separated by commas.'); return; }
+        if(!days.some(d=>!isRestDayName(d))){ onboardError('Add at least one training day as well as your rest days.'); return; }
+        if(!days.some(isRestDayName) && !onboardState.noRestOk){
+          onboardState.noRestOk = true;
+          onboardError('Add “Rest” where your rest days fall (e.g. Push, Pull, Legs, Rest) so they don’t break your streak. Train every day? Tap Continue again.');
+          return;
+        }
         onboardState.customDays = days;
       }
     }
@@ -2467,6 +2608,12 @@ async function boot(){
 
   if(!session){
     const raw = readJSON(SESSION_KEY, null);
+    if(raw && raw.mode === 'backend'){
+      // A session from the previous ForgeFit server.
+      clearSession();
+      showAuthNotice('ForgeFit has moved to a new, faster server. Please log in again — your username and password haven’t changed, and your data is waiting for you.');
+      if(raw.username) setTimeout(()=>{ const u = document.getElementById('loginUsername'); if(u && !u.value) u.value = raw.username; }, 0);
+    }
     if(raw && raw.mode === 'local'){
       // Sessions from the old on-device-only accounts.
       clearSession();
@@ -2605,58 +2752,76 @@ function getStepHistory(user, days){
   }
   return out;
 }
+// Rest days are routine days named "Rest" / "Off" (optionally "Rest 2",
+// "Rest day"). They sit in the rotation like any other day but have no
+// workout: they never count toward the streak and never break it.
+const REST_DAY_RE = /^(rest|off)(\s+day)?(\s*\d+)?$/i;
+const WEEKDAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+function isRestDayName(name){ return REST_DAY_RE.test(String(name||'').trim()); }
+function trainingDays(user){ return Object.keys(user.routine || {}).filter(d=>!isRestDayName(d)); }
+function weekdayIndex(name){
+  const n = String(name||'').trim().toLowerCase();
+  return WEEKDAY_NAMES.findIndex(w => n===w || n===w.slice(0,3));
+}
+function dayDiff(fromStr, toStr){
+  const t = (x)=>{ const [y,m,d] = x.split('-').map(Number); return Date.UTC(y,m-1,d); };
+  return Math.round((t(toStr)-t(fromStr))/864e5);
+}
+function shiftDateStr(str, n){
+  const d = new Date(str+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+/** True when `dateStr` is a planned rest day in the user's routine. */
+function isScheduledRestDay(user, dateStr){
+  const order = Object.keys(user.routine || {});
+  if(!order.length) return false;
+  // Days named after weekdays ("Monday", "Tue"): any weekday missing from
+  // the routine, or named Rest, is a rest day.
+  if(order.every(d => weekdayIndex(d) >= 0 || isRestDayName(d)) && order.some(d => weekdayIndex(d) >= 0)){
+    const dow = new Date(dateStr+'T00:00:00').getDay();
+    return !order.some(d => weekdayIndex(d) === dow);
+  }
+  // Rotating split: count forward from the last workout before this date.
+  // Every day in between must land on a Rest slot.
+  if(!order.some(isRestDayName)) return false;
+  let prev = null;
+  (user.workoutLogs || []).forEach(w => { if(w.date < dateStr && (!prev || w.date > prev.date)) prev = w; });
+  if(!prev) return false;
+  const i = order.indexOf(prev.day);
+  if(i < 0) return false;
+  const gap = dayDiff(prev.date, dateStr);
+  for(let k=1; k<=gap; k++){
+    if(!isRestDayName(order[(i+k) % order.length])) return false;
+  }
+  return true;
+}
 function computeStreak(user){
   const trainedDates = new Set(user.workoutLogs.map(w=>w.date));
-  // Build set of all scheduled training days from the user's routine
-  const routineDays = Object.keys(user.routine || {});
-  // Map each routine day name to actual recent dates
-  const scheduledDates = new Set();
-  if(routineDays.length > 0){
-    const dayMap = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
-    const nameMap = {sunday:'sun',monday:'mon',tuesday:'tue',wednesday:'wed',thursday:'thu',friday:'fri',saturday:'sat',
-      'leg day':'leg','push day':'push','pull day':'pull','upper day':'upper','lower day':'lower','full body':'full'};
-    // Go back up to 30 days and check each day
-    for(let i=0;i<30;i++){
-      const d2 = new Date();
-      d2.setDate(d2.getDate()-i);
-      const dow = ['sun','mon','tue','wed','thu','fri','sat'][d2.getDay()];
-      const isRestDay = routineDays.every(rd => {
-        const mapped = nameMap[rd.toLowerCase()] || rd.toLowerCase();
-        return mapped !== dow && rd.toLowerCase() !== dow;
-      });
-      // If it's NOT a rest day (i.e. it IS a training day), mark it
-      if(!isRestDay){
-        const ds2 = d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
-        scheduledDates.add(ds2);
-      }
-    }
-  }
-  let streak = 0;
-  let d = new Date();
+  let ds = todayStr();
   // if no workout logged today yet, start counting from yesterday
-  if(!trainedDates.has(todayStr())){
-    d.setDate(d.getDate()-1);
-  }
-  while(true){
-    const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    if(trainedDates.has(ds)){
-      streak++;
-      d.setDate(d.getDate()-1);
-    } else if(scheduledDates.size > 0 && !scheduledDates.has(ds)){
-      // This is a rest day — skip it without breaking the streak
-      d.setDate(d.getDate()-1);
-      // Don't count rest days in streak
-    } else {
-      break;
-    }
+  if(!trainedDates.has(ds)) ds = shiftDateStr(ds, -1);
+  let streak = 0;
+  for(let guard=0; guard<1000; guard++){
+    if(trainedDates.has(ds)) streak++;
+    else if(!isScheduledRestDay(user, ds)) break;
+    ds = shiftDateStr(ds, -1);
   }
   return streak;
 }
 function nextTrainingDay(user){
-  const days = Object.keys(user.routine || {});
+  const order = Object.keys(user.routine || {});
+  const days = trainingDays(user);
   if(days.length===0) return null;
-  const count = user.workoutLogs.length;
-  return days[count % days.length];
+  let last = null;
+  (user.workoutLogs || []).forEach(w => { if(!last || w.date >= last.date) last = w; });
+  const i = last ? order.indexOf(last.day) : -1;
+  if(i < 0) return last ? days[user.workoutLogs.length % days.length] : days[0];
+  for(let k=1; k<=order.length; k++){
+    const d = order[(i+k) % order.length];
+    if(!isRestDayName(d)) return d;
+  }
+  return days[0];
 }
 
 /* =========================================================
@@ -2681,6 +2846,7 @@ document.addEventListener('keydown', (e)=>{
   if(e.key === 'Escape'){
     closeWorkoutHistory();
     closeStepsModal();
+    if(typeof closeDayDiet === 'function') closeDayDiet();
     if(typeof closePhotoModal === 'function' && document.getElementById('photoModal').classList.contains('active')) closePhotoModal();
     if(typeof closeImportModal === 'function') closeImportModal();
     document.getElementById('sidebar').classList.remove('open');
@@ -2869,9 +3035,11 @@ function saveLiveSteps(){
   if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
 }
 
+// A set exactly as it was logged: each side of a unilateral set and each
+// drop of a drop set is shown separately (reps are never added together).
 function formatSet(s){
-  if(s.type==='dropset') return s.drops.map(d=>d.weight+'×'+d.reps).join(' → ') + ' drop';
-  if(s.type==='unilateral') return (s.left ? 'L '+s.left.weight+'×'+s.left.reps : '') + (s.left && s.right ? ' · ' : '') + (s.right ? 'R '+s.right.weight+'×'+s.right.reps : '');
+  if(s.type==='dropset') return 'Drop ' + s.drops.map(d=>d.weight+'kg × '+d.reps).join(' → ');
+  if(s.type==='unilateral') return [s.left ? 'L '+s.left.weight+'kg × '+s.left.reps : '', s.right ? 'R '+s.right.weight+'kg × '+s.right.reps : ''].filter(Boolean).join(' · ');
   return s.weight+'kg × '+s.reps;
 }
 
@@ -3194,6 +3362,7 @@ function renderDashboard(){
   const today = sumMacros(getTodayMeals(user));
   const streak = computeStreak(user);
   const nextDay = nextTrainingDay(user);
+  const restToday = !user.workoutLogs.some(w=>w.date===todayStr()) && isScheduledRestDay(user, todayStr());
   const t = user.targets;
 
   const calPct = Math.min(100, Math.round((today.cal/t.calories)*100));
@@ -3269,7 +3438,11 @@ function renderDashboard(){
           <span class="kicker">Up next</span>
           <span class="kicker">${escapeHtml(SPLIT_LABELS[user.splitType] || user.splitType || '')}</span>
         </div>
-        ${nextDay ? `
+        ${nextDay && restToday ? `
+          <div class="next-day">Rest day</div>
+          <p class="muted">Recover today — your ${streak}-day streak is safe. Next up: ${escapeHtml(nextDay)}.</p>
+          <button class="btn btn--sm" type="button" style="margin-top:22px;background:var(--on-fg);color:var(--fg);" onclick="goToView('train')">Train anyway${icon('arrow-right','i--sm')}</button>
+        ` : nextDay ? `
           <div class="next-day">${escapeHtml(nextDay)}</div>
           <p class="muted">${(user.routine[nextDay]||[]).length} exercises planned</p>
           <button class="btn btn--sm" type="button" style="margin-top:22px;background:var(--on-fg);color:var(--fg);" onclick="goToView('train')">Start training${icon('arrow-right','i--sm')}</button>
@@ -3300,7 +3473,7 @@ function renderDashboard(){
 /* =========================================================
    TRAIN VIEW
    ========================================================= */
-let trainState = { activeDay:null, pendingSets:{}, exModes:{}, addPanelOpen:false, addPanelMuscle:'All', customFormOpen:false, restTimer:{active:false, remaining:0, duration:90, intervalId:null},
+let trainState = { activeDay:null, pendingSets:{}, exModes:{}, addPanelOpen:false, addPanelMuscle:'All', customFormOpen:false, restTimer:{active:false, remaining:0, duration:90, endsAt:0, intervalId:null},
   draftInputs:{}, draftStartedAt:null, draftResumed:false, draftLoadedFor:null };
 // exModes[exId] = 'normal' | 'dropset' | 'unilateral'
 
@@ -3540,7 +3713,7 @@ function getLastSessionTopSet(user, exId){
     if(found && found.sets.length){
       const topWeight = Math.max(...found.sets.map(s=>setWeight(s)));
       const top = found.sets.find(s=>setWeight(s)===topWeight) || found.sets[0];
-      return {weight: topWeight, reps: setReps(top)};
+      return {weight: topWeight, reps: setReps(top), set: top};
     }
   }
   return null;
@@ -3603,62 +3776,210 @@ async function repeatLastWorkout(){
   showTrainBanner(`Pre-filled with your sets from last ${escapeHtml(day)} session (${fmtDate(lastSession.date)}). Adjust anything, then save.`, {icon:'repeat'});
 }
 
-/* ---------- Rest timer ---------- */
+/* ---------- Rest timer ----------
+   Length and auto-start are remembered per account on this device. The
+   countdown is computed from an end time, so it stays accurate even if
+   the phone throttles the app while it's in the background. */
+const PREFS_KEY = 'forgefit_prefs_v1';
+const REST_PRESETS = [60, 90, 120, 180];
+
+function getPrefs(){
+  const s = getSession();
+  const all = readJSON(PREFS_KEY, {});
+  return Object.assign({restSeconds: 90, restAuto: false}, (s && all[s.username]) || {});
+}
+function setPrefs(patch){
+  const s = getSession();
+  if(!s) return;
+  const all = readJSON(PREFS_KEY, {});
+  all[s.username] = Object.assign(getPrefs(), patch);
+  writeJSON(PREFS_KEY, all);
+}
+function fmtClock(sec){ return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0'); }
+
+// The end-of-rest alarm. In the Android app it's a scheduled system
+// notification with its own sound, so it rings even when ForgeFit is in the
+// background or the phone is locked. In a browser it's a chime played by the
+// page (which only works while the page is open).
+const RestAlarm = {
+  ID: 4207,
+  CHANNEL: 'rest-timer',
+  queue: Promise.resolve(),
+  ready: null,
+  plugin(){
+    const C = window.Capacitor;
+    return (C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.LocalNotifications) || null;
+  },
+  run(fn){ this.queue = this.queue.then(fn).catch(()=>{}); return this.queue; },
+  setup(){
+    const LN = this.plugin();
+    if(!LN) return Promise.resolve(false);
+    if(this.ready) return this.ready;
+    this.ready = (async ()=>{
+      await LN.createChannel({id:this.CHANNEL, name:'Rest timer', description:'Rings when your rest is over', importance:5, visibility:1, sound:'rest_done.wav', vibration:true});
+      let perm = await LN.checkPermissions();
+      if(perm.display !== 'granted') perm = await LN.requestPermissions();
+      if(perm.display !== 'granted'){
+        toast('Allow notifications for ForgeFit so the rest timer can ring in the background.', {tone:'outline'});
+        this.ready = null;
+        return false;
+      }
+      return true;
+    })().catch(()=>{ this.ready = null; return false; });
+    return this.ready;
+  },
+  schedule(endsAt){
+    const LN = this.plugin();
+    if(!LN) return;
+    this.run(async ()=>{
+      if(!(await this.setup())) return;
+      await LN.cancel({notifications:[{id:this.ID}]});
+      const res = await LN.schedule({notifications:[{
+        id: this.ID, title: 'Rest over', body: 'Time for your next set.',
+        channelId: this.CHANNEL, sound: 'rest_done.wav', smallIcon: 'ic_stat_forgefit', autoCancel: true,
+        schedule: {at: new Date(endsAt), allowWhileIdle: true},
+      }]});
+      if(res && res.warning) this.askForExactAlarms();
+    });
+  },
+  cancel(){
+    const LN = this.plugin();
+    if(!LN) return;
+    this.run(()=> LN.cancel({notifications:[{id:this.ID}]}));
+  },
+  // Without "Alarms & reminders" access Android may ring late, so ask once.
+  async askForExactAlarms(){
+    if(getPrefs().exactAlarmAsked) return;
+    setPrefs({exactAlarmAsked: true});
+    const choice = await chooseDialog({
+      title: 'Ring exactly on time?',
+      body: 'Android may delay the rest timer sound unless ForgeFit is allowed to set alarms. Turn on “Allow setting alarms and reminders” on the next screen.',
+      actions: [
+        {label:'Not now', value:'no', style:'ghost'},
+        {label:'Open settings', value:'open', style:'primary'},
+      ]
+    });
+    if(choice === 'open') this.plugin().changeExactNotificationSetting().catch(()=>{});
+  },
+  // Browser fallback: a short three-note chime.
+  chime(){
+    try{
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      const ctx = this.ctx || (this.ctx = new Ctx());
+      if(ctx.state === 'suspended') ctx.resume();
+      [0, 0.9].forEach(rep => [880, 1108.73, 1318.51].forEach((f, i) => {
+        const t = ctx.currentTime + rep + i*0.16;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.35, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t); o.stop(t + 0.5);
+      }));
+    }catch(e){ /* no audio available */ }
+  },
+};
+
 function startRestTimer(seconds){
+  seconds = Math.round(seconds || getPrefs().restSeconds);
   stopRestTimer(false);
-  trainState.restTimer.active = true;
-  trainState.restTimer.duration = seconds;
-  trainState.restTimer.remaining = seconds;
-  trainState.restTimer.intervalId = setInterval(()=>{
-    trainState.restTimer.remaining--;
-    updateRestTimerDisplay();
-    if(trainState.restTimer.remaining <= 0){
-      stopRestTimer(true);
-    }
-  }, 1000);
+  const rt = trainState.restTimer;
+  rt.active = true;
+  rt.duration = seconds;
+  rt.remaining = seconds;
+  rt.endsAt = Date.now() + seconds * 1000;
+  rt.intervalId = setInterval(tickRestTimer, 250);
+  RestAlarm.schedule(rt.endsAt);
   renderRestTimerWidget();
 }
+function tickRestTimer(){
+  const rt = trainState.restTimer;
+  if(!rt.active) return;
+  rt.remaining = Math.max(0, Math.ceil((rt.endsAt - Date.now()) / 1000));
+  updateRestTimerDisplay();
+  if(rt.remaining <= 0) stopRestTimer(true);
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') tickRestTimer(); });
+
 function stopRestTimer(completed){
   if(trainState.restTimer.intervalId) clearInterval(trainState.restTimer.intervalId);
   trainState.restTimer.intervalId = null;
   trainState.restTimer.active = false;
+  if(!completed) RestAlarm.cancel();
   if(completed){
+    // In the app the scheduled notification plays the sound.
+    if(!RestAlarm.plugin()) RestAlarm.chime();
     if(navigator.vibrate) navigator.vibrate([200,100,200]);
     showTrainBanner('<b>Rest over</b> — next set.', {icon:'timer', strong:true, duration:3000});
   }
   renderRestTimerWidget();
 }
 function updateRestTimerDisplay(){
+  const rt = trainState.restTimer;
   const el = document.getElementById('restTimerDisplay');
-  if(!el) return;
-  const m = Math.floor(trainState.restTimer.remaining/60);
-  const s = trainState.restTimer.remaining%60;
-  el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+  if(el) el.textContent = fmtClock(rt.remaining);
+  const fill = document.getElementById('restTimerFill');
+  if(fill) fill.style.width = Math.round((rt.remaining/rt.duration)*100) + '%';
 }
+
+function chooseRestPreset(sec){
+  setPrefs({restSeconds: sec});
+  startRestTimer(sec);
+}
+function setCustomRest(raw){
+  const sec = Math.round(parseFloat(raw));
+  const err = document.getElementById('restCustomError');
+  if(!sec || sec < 10 || sec > 900){
+    if(err) err.textContent = 'Pick between 10 and 900 seconds.';
+    return;
+  }
+  if(err) err.textContent = '';
+  setPrefs({restSeconds: sec});
+  renderRestTimerWidget();
+}
+function setRestAuto(on){
+  setPrefs({restAuto: !!on});
+  toast(on ? 'Rest timer will start after each set.' : 'Rest timer auto-start off.');
+}
+
 function renderRestTimerWidget(){
   const el = document.getElementById('restTimerWidget');
   if(!el) return;
   const rt = trainState.restTimer;
+  const prefs = getPrefs();
   if(rt.active){
     const pct = Math.round((rt.remaining/rt.duration)*100);
     el.innerHTML = `
       <div style="display:flex;align-items:center;gap:14px;">
         ${icon('timer')}
-        <div class="num" style="font-size:24px;min-width:62px;" id="restTimerDisplay" aria-live="off">${Math.floor(rt.remaining/60)}:${String(rt.remaining%60).padStart(2,'0')}</div>
-        <div style="flex:1;"><div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div></div>
+        <div class="num" style="font-size:24px;min-width:62px;" id="restTimerDisplay" aria-live="off">${fmtClock(rt.remaining)}</div>
+        <div style="flex:1;"><div class="progress-track"><div class="progress-fill" id="restTimerFill" style="width:${pct}%;"></div></div></div>
+        <button class="btn btn--ghost btn--xs" type="button" onclick="startRestTimer(${rt.duration})" aria-label="Restart rest timer">${icon('repeat','i--sm')}</button>
         <button class="btn btn--ghost btn--xs" type="button" onclick="stopRestTimer(false)">Cancel</button>
       </div>
     `;
   } else {
     el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="spread" style="margin-bottom:10px;">
         <span class="label" style="display:flex;align-items:center;gap:6px;">${icon('timer','i--sm')}Rest timer</span>
-        <div class="segmented" role="group" aria-label="Start rest timer">
-          <button type="button" onclick="startRestTimer(60)">60s</button>
-          <button type="button" onclick="startRestTimer(90)">90s</button>
-          <button type="button" onclick="startRestTimer(120)">120s</button>
-        </div>
+        <button class="btn btn--primary btn--xs" type="button" onclick="startRestTimer()">Start ${fmtClock(prefs.restSeconds)}</button>
       </div>
+      <div class="cluster" style="gap:8px;">
+        <div class="segmented" role="group" aria-label="Rest length">
+          ${REST_PRESETS.map(sec=>`<button type="button" class="${prefs.restSeconds===sec?'active':''}" onclick="chooseRestPreset(${sec})">${sec}s</button>`).join('')}
+        </div>
+        <label class="cluster" style="gap:6px;flex-wrap:nowrap;">
+          <input id="restCustomSec" class="input input--sm input--num" type="number" inputmode="numeric" min="10" max="900" step="5" value="${prefs.restSeconds}" aria-label="Custom rest length in seconds" onchange="setCustomRest(this.value)" style="width:66px;">
+          <span class="unit">sec</span>
+        </label>
+      </div>
+      <div class="error-text" id="restCustomError" role="alert"></div>
+      <label class="check" style="margin-top:10px;padding:10px 12px;background:var(--surface);">
+        <input type="checkbox" id="restAutoToggle" ${prefs.restAuto ? 'checked' : ''} onchange="setRestAuto(this.checked)">
+        <span style="font-size:13px;">Auto-start after each set</span>
+      </label>
     `;
   }
 }
@@ -3727,12 +4048,29 @@ function addPendingSet(exId){
   }
   clearDraftInputsFor(exId);
   persistWorkoutDraft();
-  renderTrain();
+  keepExerciseInPlace(exId, ()=>{
+    renderTrain();
+    const prefs = getPrefs();
+    if(prefs.restAuto) startRestTimer(prefs.restSeconds);
+  });
 }
 function removePendingSet(exId, idx){
   trainState.pendingSets[exId].splice(idx,1);
   persistWorkoutDraft();
-  renderTrain();
+  keepExerciseInPlace(exId, renderTrain);
+}
+// Re-rendering Train changes the height of things above the exercise (the
+// rest timer swaps its settings for a countdown), which made the page jump.
+// Keep the exercise card at the same spot on screen instead.
+function keepExerciseInPlace(exId, fn){
+  const find = ()=> document.querySelector('#view-train .log-ex[data-ex="'+exId+'"]');
+  const before = find();
+  const top = before ? before.getBoundingClientRect().top : null;
+  fn();
+  const after = find();
+  if(top === null || !after) return;
+  const delta = after.getBoundingClientRect().top - top;
+  if(Math.abs(delta) >= 1) window.scrollBy(0, delta);
 }
 function updateFinishBtnLabel(){
   const btn = document.getElementById('finishWorkoutBtn');
@@ -3814,7 +4152,7 @@ function finishWorkout(){
 function renderTrain(){
   const user = currentUser();
   const el = document.getElementById('view-train');
-  const days = Object.keys(user.routine || {});
+  const days = trainingDays(user);
   const draftDayMissing = hasActiveWorkout() && trainState.activeDay && !days.includes(trainState.activeDay);
   if(!draftDayMissing && (!trainState.activeDay || !days.includes(trainState.activeDay))){
     trainState.activeDay = nextTrainingDay(user) || days[0];
@@ -3946,14 +4284,35 @@ function submitCustomExercise(day){
   trainState.customFormOpen = false;
 }
 
+// Splits the last top set into starting values for each input mode, so a
+// unilateral set pre-fills left and right separately, a drop set every drop.
+function lastSetPrefill(set){
+  const rw = (x) => x ? {reps: x.reps, weight: x.weight} : {reps:'', weight:''};
+  const out = {normal: rw(null), left: rw(null), right: rw(null), drops: []};
+  if(!set) return out;
+  if(set.type === 'unilateral'){
+    out.left = rw(set.left); out.right = rw(set.right);
+    out.normal = rw(set.left || set.right);
+    out.drops = [out.normal];
+  } else if(set.type === 'dropset'){
+    out.drops = set.drops.map(d=>rw(d));
+    out.normal = out.left = out.right = rw(set.drops[0]);
+  } else {
+    out.normal = out.left = out.right = rw(set);
+    out.drops = [rw(set)];
+  }
+  return out;
+}
+
 function renderLogExercise(user, exId){
   const ex = exById(exId);
   if(!ex) return '';
   const sets = trainState.pendingSets[exId] || [];
   const mode = trainState.exModes[exId] || 'normal';
   const last = getLastSessionTopSet(user, exId);
-  const lastW = last ? last.weight : '';
-  const lastR = last ? last.reps : '';
+  const pre = lastSetPrefill(last && last.set);
+  const lastW = pre.normal.weight;
+  const lastR = pre.normal.reps;
 
   const modeBtn = (m, label) => `<button type="button" class="${mode===m?'active':''}" onclick="toggleExMode('${exId}','${m}')" aria-pressed="${mode===m}">${label}</button>`;
   const num = (id, ph, val, step, label) => `<input id="${id}" class="input input--sm input--num" type="number" inputmode="${step ? 'decimal' : 'numeric'}" min="0" ${step ? 'step="0.5"' : ''} placeholder="${ph}" value="${val}" aria-label="${label}">`;
@@ -3962,17 +4321,17 @@ function renderLogExercise(user, exId){
   if(mode === 'dropset'){
     inputHTML = `<div class="stack" style="gap:6px;">
       ${[0,1,2].map(i=>`<div class="set-inputs"><span class="tag">Drop ${i+1}</span>
-        ${num('drep_'+exId+'_'+i, 'Reps', i===0 ? lastR : '', false, 'Drop '+(i+1)+' reps')}
+        ${num('drep_'+exId+'_'+i, 'Reps', pre.drops[i] ? pre.drops[i].reps : '', false, 'Drop '+(i+1)+' reps')}
         <span class="unit">reps</span>
-        ${num('dwt_'+exId+'_'+i, 'kg', i===0 ? lastW : '', true, 'Drop '+(i+1)+' weight in kg')}
+        ${num('dwt_'+exId+'_'+i, 'kg', pre.drops[i] ? pre.drops[i].weight : '', true, 'Drop '+(i+1)+' weight in kg')}
         <span class="unit">kg</span>
       </div>`).join('')}
       <div><button class="btn btn--ghost btn--xs" type="button" onclick="addPendingSet('${exId}')">${icon('plus','i--sm')}Add drop set</button></div>
     </div>`;
   } else if(mode === 'unilateral'){
     inputHTML = `<div class="stack" style="gap:6px;">
-      <div class="set-inputs"><span class="tag">Left</span>${num('lreps_'+exId, 'Reps', lastR, false, 'Left reps')}<span class="unit">reps</span>${num('lwt_'+exId, 'kg', lastW, true, 'Left weight in kg')}<span class="unit">kg</span></div>
-      <div class="set-inputs"><span class="tag">Right</span>${num('rreps_'+exId, 'Reps', lastR, false, 'Right reps')}<span class="unit">reps</span>${num('rwt_'+exId, 'kg', lastW, true, 'Right weight in kg')}<span class="unit">kg</span></div>
+      <div class="set-inputs"><span class="tag">Left</span>${num('lreps_'+exId, 'Reps', pre.left.reps, false, 'Left reps')}<span class="unit">reps</span>${num('lwt_'+exId, 'kg', pre.left.weight, true, 'Left weight in kg')}<span class="unit">kg</span></div>
+      <div class="set-inputs"><span class="tag">Right</span>${num('rreps_'+exId, 'Reps', pre.right.reps, false, 'Right reps')}<span class="unit">reps</span>${num('rwt_'+exId, 'kg', pre.right.weight, true, 'Right weight in kg')}<span class="unit">kg</span></div>
       <div><button class="btn btn--ghost btn--xs" type="button" onclick="addPendingSet('${exId}')">${icon('plus','i--sm')}Add unilateral set</button></div>
     </div>`;
   } else {
@@ -3984,10 +4343,10 @@ function renderLogExercise(user, exId){
   }
 
   return `
-    <div class="log-ex">
+    <div class="log-ex" data-ex="${exId}">
       <div class="log-ex__head">
         <span class="log-ex__name">${escapeHtml(ex.n)}</span>
-        ${last ? `<span class="log-ex__last">last ${last.weight}kg × ${last.reps}</span>` : `<span class="log-ex__last">first time</span>`}
+        ${last ? `<span class="log-ex__last">last ${escapeHtml(formatSet(last.set))}</span>` : `<span class="log-ex__last">first time</span>`}
       </div>
       <div class="segmented" style="margin-bottom:10px;" role="group" aria-label="Set type for ${escapeHtml(ex.n)}">${modeBtn('normal','Regular')}${modeBtn('dropset','Drop set')}${modeBtn('unilateral','Unilateral')}</div>
       ${sets.length ? `<div class="stack" style="gap:4px;margin-bottom:10px;">
@@ -4037,7 +4396,7 @@ function getExerciseHistory(user, exId){
       const topWeight = Math.max(...found.sets.map(s=>setWeight(s)));
       const topSet = found.sets.find(s=>setWeight(s)===topWeight) || found.sets[0];
       const volume = found.sets.reduce((a,s)=>a+setVolume(s),0);
-      rows.push({date:log.date, topWeight, topReps:setReps(topSet), volume});
+      rows.push({date:log.date, topWeight, topReps:setReps(topSet), topSet, volume});
     }
   });
   return rows.sort((a,b)=> a.date.localeCompare(b.date));
@@ -4264,7 +4623,7 @@ function renderProgress(){
     `<div>
       ${prs.map(r=>`<div class="row row--plain">
         <div class="row__main"><div class="row__title">${escapeHtml(r.ex.n)}</div><div class="row__meta">${r.ex.m} · last trained ${fmtDate(r.lastDate)}</div></div>
-        <b class="num" style="white-space:nowrap;font-weight:500;">${r.best.topWeight}kg × ${r.best.topReps}</b>
+        <b class="num" style="white-space:nowrap;font-weight:500;">${escapeHtml(formatSet(r.best.topSet))}</b>
       </div>`).join('')}
     </div>`;
 
@@ -4517,19 +4876,26 @@ function addCustomFood(){
 }
 
 /* ---------- My foods: saved custom foods, logged again in one tap ---------- */
+function macroLine(x){
+  return `${Math.round(x.cal)} kcal · P ${round1(x.p)} · C ${round1(x.c||0)} · F ${round1(x.f||0)}`;
+}
+
+// Each saved food logs with its saved macros, but calories and protein can
+// be adjusted first for how much you're actually having.
 function renderSavedFoodsHTML(user){
   const foods = user.savedFoods || [];
   if(!foods.length) return '';
   return `
-    <div class="spread" style="margin-bottom:8px;"><span class="label">My foods</span><span class="small faint">${foods.length} saved</span></div>
-    <div class="list-scroll" style="max-height:260px;margin-bottom:18px;">
-      ${foods.map(f=>`<div class="row" style="padding:8px 6px 8px 12px;">
-        <div class="row__main">
+    <div class="spread" style="margin-bottom:8px;"><span class="label">My foods</span><span class="small faint">${foods.length} saved · adjust before adding</span></div>
+    <div class="list-scroll" style="max-height:340px;margin-bottom:18px;">
+      ${foods.map(f=>`<div class="row" style="padding:10px 6px 10px 12px;align-items:flex-start;flex-wrap:wrap;row-gap:8px;">
+        <div class="row__main" style="min-width:150px;">
           <div class="row__title" style="font-size:13.5px;">${escapeHtml(f.n)}</div>
-          <div class="row__meta">${f.serving ? escapeHtml(f.serving) + ' · ' : ''}<span class="num">${Math.round(f.cal)}</span> kcal · P <span class="num">${round1(f.p)}</span> · C <span class="num">${round1(f.c||0)}</span> · F <span class="num">${round1(f.f||0)}</span></div>
+          <div class="row__meta">${f.serving ? escapeHtml(f.serving) + ' · ' : ''}<span class="num">${macroLine(f)}</span></div>
         </div>
         <div class="cluster" style="flex-wrap:nowrap;gap:6px;">
-          <input id="sqty_${f.id}" class="input input--sm input--num" type="number" inputmode="decimal" min="0.25" step="0.25" value="1" aria-label="Servings of ${escapeHtml(f.n)}" style="width:56px;"><span class="unit">×</span>
+          <input id="scal_${f.id}" class="input input--sm input--num" type="number" inputmode="decimal" min="0" step="any" value="${round1(f.cal)}" aria-label="Calories for ${escapeHtml(f.n)}" style="width:66px;"><span class="unit">kcal</span>
+          <input id="sp_${f.id}" class="input input--sm input--num" type="number" inputmode="decimal" min="0" step="any" value="${round1(f.p)}" aria-label="Protein in grams for ${escapeHtml(f.n)}" style="width:56px;"><span class="unit">g P</span>
           <button class="btn btn--primary btn--xs" type="button" onclick="addSavedFood('${f.id}')" aria-label="Add ${escapeHtml(f.n)}">Add</button>
           <button class="x-btn" type="button" onclick="removeSavedFood('${f.id}')" aria-label="Remove ${escapeHtml(f.n)} from My foods">${icon('x','i--sm')}</button>
         </div>
@@ -4541,14 +4907,17 @@ function addSavedFood(id){
   const user = currentUser();
   const food = (user.savedFoods || []).find(f=>f.id === id);
   if(!food) return;
-  const input = document.getElementById('sqty_'+id);
-  const mult = input ? parseFloat(input.value) : 1;
-  if(!mult || mult <= 0 || mult > 100){ if(input) input.focus(); return; }
+  const calEl = document.getElementById('scal_'+id);
+  const pEl = document.getElementById('sp_'+id);
+  const cal = calEl ? parseFloat(calEl.value) : food.cal;
+  const p = pEl ? parseFloat(pEl.value) : food.p;
+  if(isNaN(cal) || cal < 0 || cal > 20000){ if(calEl) calEl.focus(); toast('Enter valid calories for ' + food.n + '.', {tone:'outline'}); return; }
+  if(isNaN(p) || p < 0 || p > 2000){ if(pEl) pEl.focus(); toast('Enter valid protein for ' + food.n + '.', {tone:'outline'}); return; }
   user.mealLogs.push({
     uid: newId('m'),
     date: todayStr(), meal: dietState.meal, foodId: food.id,
-    name: food.n, servings: mult, qtyUnit: 'serving', qtyAmount: mult,
-    cal: round1(food.cal*mult), p: round1(food.p*mult), c: round1((food.c||0)*mult), f: round1((food.f||0)*mult),
+    name: food.n, servings: 1, qtyUnit: 'custom', qtyAmount: 1,
+    cal: round1(cal), p: round1(p), c: round1(food.c||0), f: round1(food.f||0),
     source: 'custom'
   });
   reportSave(saveCurrentUser(user), food.n + ' added to ' + dietState.meal + '.');
@@ -4572,6 +4941,111 @@ async function removeSavedFood(id){
   u.savedFoods = (u.savedFoods || []).filter(f=>f.id !== id);
   reportSave(saveCurrentUser(u), food.n + ' removed from My foods.');
   renderDiet();
+}
+
+/* ---------- Quantities as logged ---------- */
+function mealQtyLabel(m){
+  const u = m.qtyUnit;
+  if(!u || u === 'custom' || u === 'photo' || u === 'grams') return '';   // already in the name / not a quantity
+  if(u === 'g') return m.qtyAmount + ' g';
+  if(u === 'serving') return m.servings && m.servings !== 1 ? '× ' + round1(m.servings) : '';
+  return round1(m.qtyAmount) + ' ' + u;                                     // saved foods: "150 g", "1.5 bowl"
+}
+
+/* ---------- Full-day diet view ---------- */
+let dayDietState = { date: null, picker: false };
+
+function openDayDiet(date, showPicker){
+  dayDietState = { date: date || todayStr(), picker: !!showPicker };
+  document.getElementById('dayDietModal').classList.add('active');
+  renderDayDiet();
+}
+function closeDayDiet(){
+  const m = document.getElementById('dayDietModal');
+  if(m) m.classList.remove('active');
+}
+document.getElementById('dayDietModal').addEventListener('click', (e)=>{ if(e.target.id === 'dayDietModal') closeDayDiet(); });
+
+function shiftDayDiet(days){
+  const d = new Date(dayDietState.date + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  const next = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(next > todayStr()) return;
+  dayDietState.date = next;
+  renderDayDiet();
+}
+function pickDayDiet(value){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value) || value > todayStr()) return;
+  dayDietState.date = value;
+  renderDayDiet();
+}
+
+function renderDayDiet(){
+  const user = currentUser();
+  const body = document.getElementById('dayDietBody');
+  if(!user || !body) return;
+  const date = dayDietState.date;
+  const isToday = date === todayStr();
+  const meals = user.mealLogs.filter(m=>m.date === date);
+  const tot = sumMacros(meals);
+  const t = user.targets || {calories:0, protein:0, carbs:0, fat:0};
+  document.getElementById('dayDietTitle').textContent = isToday ? 'Today' : new Date(date+'T00:00:00').toLocaleDateString(undefined, {weekday:'long', day:'numeric', month:'long'});
+  document.getElementById('dayDietSub').textContent = meals.length ? meals.length + (meals.length===1 ? ' item logged' : ' items logged') : 'Nothing logged';
+
+  const groups = MEAL_TABS.map(name=>({name, items: meals.filter(m=>m.meal === name)}));
+  const other = meals.filter(m=>!MEAL_TABS.includes(m.meal));
+  if(other.length) groups.push({name:'Other', items: other});
+
+  const meter = (label, val, target, unit, cls) => {
+    const pct = target ? Math.min(100, Math.round(val/target*100)) : 0;
+    return `<div class="meter">
+      <div class="meter__top"><span class="meter__label">${label}</span><span class="meter__value"><b>${label==='Calories' ? Math.round(val).toLocaleString() : round1(val)}</b> / ${target ? target.toLocaleString() : '—'}${unit}</span></div>
+      <div class="progress-track"><div class="progress-fill ${cls}" style="width:${pct}%;"></div></div>
+    </div>`;
+  };
+
+  const checks = (user.dietPlanChecks && user.dietPlanChecks[date]) || {};
+  const plan = user.dietPlan && user.dietPlan.items && user.dietPlan.items.length ? user.dietPlan.items : null;
+
+  body.innerHTML = `
+    <div class="spread" style="margin-bottom:16px;">
+      <button class="btn btn--ghost btn--sm" type="button" onclick="shiftDayDiet(-1)" aria-label="Previous day">${icon('chevron-left','i--sm')}<span class="hide-sm">Previous</span></button>
+      <input type="date" id="dayDietDate" class="input input--sm" value="${date}" max="${todayStr()}" onchange="pickDayDiet(this.value)" aria-label="Choose a day" style="width:auto;">
+      <button class="btn btn--ghost btn--sm" type="button" onclick="shiftDayDiet(1)" ${isToday ? 'disabled' : ''} aria-label="Next day"><span class="hide-sm">Next</span>${icon('chevron-right','i--sm')}</button>
+    </div>
+
+    <div class="card card--inset" style="padding:16px;margin-bottom:18px;">
+      <div class="grid-2" style="gap:14px 18px;">
+        ${meter('Calories', tot.cal, t.calories, ' kcal', '')}
+        ${meter('Protein', tot.p, t.protein, ' g', 'fill-2')}
+        ${meter('Carbs', tot.c, t.carbs, ' g', 'fill-3')}
+        ${meter('Fat', tot.f, t.fat, ' g', 'fill-4')}
+      </div>
+    </div>
+
+    ${meals.length ? groups.filter(g=>g.items.length).map(g=>{
+      const gt = sumMacros(g.items);
+      return `<div style="margin-bottom:16px;">
+        <div class="spread" style="margin-bottom:6px;"><span class="label">${escapeHtml(g.name)}</span><span class="num small faint">${Math.round(gt.cal)} kcal · P ${round1(gt.p)}</span></div>
+        <div>${g.items.map(m=>`<div class="row row--plain">
+          <div class="row__main">
+            <div class="row__title" style="font-size:13.5px;">${escapeHtml(m.name)} <span class="faint small">${escapeHtml(mealQtyLabel(m))}</span>${m.source==='photo' ? ' <span class="pill" style="height:20px;">photo est.</span>' : ''}</div>
+            <div class="row__meta num">${Math.round(m.cal)} kcal · P ${round1(m.p)} · C ${round1(m.c)} · F ${round1(m.f)}</div>
+          </div>
+        </div>`).join('')}</div>
+      </div>`;
+    }).join('') : `<div class="empty-state"><div class="ic"></div>No food logged ${isToday ? 'today yet' : 'on this day'}.</div>`}
+
+    ${plan ? `<div style="margin-top:6px;">
+      <div class="spread" style="margin-bottom:6px;"><span class="label">Diet plan</span><span class="small faint">${plan.filter(i=>checks[i.id]).length} of ${plan.length} done</span></div>
+      ${plan.map(i=>`<div class="row row--plain"><span style="font-size:13.5px;${checks[i.id] ? '' : 'color:var(--fg-3);'}">${checks[i.id] ? '✓ ' : '○ '}${escapeHtml(i.text)}</span></div>`).join('')}
+    </div>` : ''}
+  `;
+  if(dayDietState.picker){
+    dayDietState.picker = false;
+    const el = document.getElementById('dayDietDate');
+    if(el && el.showPicker) try{ el.showPicker(); }catch(e){}
+  }
 }
 
 function getHistory(user, days){
@@ -4627,7 +5101,7 @@ function renderDiet(){
     </div>`;
   }
 
-  const qtyLabel = (m) => m.qtyUnit==='g' ? `${m.qtyAmount} g` : (m.servings && m.servings!==1 ? `× ${round1(m.servings)}` : '');
+  const qtyLabel = mealQtyLabel;
   const sourceTag = (m) => m.source==='photo' ? '<span class="pill" style="height:20px;">photo est.</span>'
     : (m.qtyUnit==='custom' || m.source==='custom') ? '<span class="pill" style="height:20px;">custom</span>' : '';
 
@@ -4643,7 +5117,7 @@ function renderDiet(){
       <div class="stack stack--lg">
         <div class="card">
           <div class="card__head">
-            <div><h3>Today’s log</h3><div class="sub">${user.profile.diet==='veg'?'Vegetarian':'Non-vegetarian'} profile</div></div>
+            <div><h3>Today’s log</h3><div class="sub">${user.profile.diet==='veg'?'Vegetarian':'Non-vegetarian'} profile · <button class="link-btn" type="button" onclick="openDayDiet(todayStr())">View full day</button></div></div>
             <div class="cluster">
               <button class="btn btn--primary btn--sm" type="button" onclick="openPhotoModal()">${icon('camera','i--sm')}Estimate from photo</button>
             </div>
@@ -4753,15 +5227,19 @@ function renderDiet(){
         </div>
 
         <div class="card">
-          <div class="card__head"><div><h3>Last 7 days</h3><div class="sub">Calories against your ${t.calories.toLocaleString()} kcal target</div></div></div>
-          <div class="stack" style="gap:10px;">
+          <div class="card__head">
+            <div><h3>Last 7 days</h3><div class="sub">Tap a day to see everything you ate</div></div>
+            <button class="btn btn--ghost btn--sm" type="button" onclick="openDayDiet(todayStr(), true)">${icon('calendar','i--sm')}Any day</button>
+          </div>
+          <div class="stack" style="gap:4px;">
             ${history.map(h=>{
               const pct = Math.min(100, Math.round((h.cal/t.calories)*100));
-              return `<div style="display:grid;grid-template-columns:92px minmax(0,1fr) 92px;gap:10px;align-items:center;">
-                <span class="small" style="color:var(--fg-2);">${fmtDate(h.date)}</span>
+              return `<button type="button" class="day-row" onclick="openDayDiet('${h.date}')" aria-label="View diet for ${fmtDate(h.date)}">
+                <span class="small" style="color:var(--fg-2);">${h.date===todayStr() ? 'Today' : fmtDate(h.date)}</span>
                 <div class="progress-track"><div class="progress-fill ${h.date===todayStr() ? '' : 'fill-3'}" style="width:${pct}%;"></div></div>
                 <span class="num small" style="text-align:right;color:var(--fg-3);">${Math.round(h.cal)} · ${round1(h.p)}g</span>
-              </div>`;
+                ${icon('chevron-right','i--sm')}
+              </button>`;
             }).join('')}
           </div>
         </div>
@@ -5164,12 +5642,13 @@ async function handlePhotoFile(input){
   uploadPhoto();
 }
 
-function uploadPhoto(){
+async function uploadPhoto(){
   const st = photoState;
   if(!st || !st.blob) return;
   if(!navigator.onLine){ photoError('You’re offline', 'Photo estimates need an internet connection. Connect and try again — or add the food manually.', true); return; }
-  const session = getSession();
-  if(!session){ photoError('Signed out', 'Log in again to use photo estimates.'); return; }
+  let token;
+  try{ token = await freshAccessToken(); }catch(e){ photoError('Connection problem', e.message, true); return; }
+  if(!token || photoState !== st){ if(photoState === st) photoError('Signed out', 'Log in again to use photo estimates.'); return; }
 
   const form = new FormData();
   form.append('photo', st.blob, st.blob.name || 'meal.jpg');
@@ -5181,7 +5660,7 @@ function uploadPhoto(){
   st.progress = 0;
   renderPhotoModal();
   xhr.open('POST', API_BASE_URL + '/api/ai/food-photo');
-  xhr.setRequestHeader('Authorization', 'Bearer ' + session.token);
+  xhr.setRequestHeader('Authorization', 'Bearer ' + token);
   xhr.timeout = 120000;
   xhr.upload.onprogress = (ev)=>{
     if(!ev.lengthComputable || photoState !== st) return;
@@ -5360,7 +5839,7 @@ function proactiveCoachMessage(user){
     lines.push(`Heads up — <b>${c.undertrained.slice(0,2).join(' & ')}</b> hasn’t shown up in your logs for 2 weeks.`);
   } else if(c.prs.length && c.prs[0].ex){
     const top = c.prs[0];
-    lines.push(`Nice work on ${escapeHtml(top.ex.n)} — best set so far is ${top.best.topWeight}kg × ${top.best.topReps}. Ask me about your progress any time.`);
+    lines.push(`Nice work on ${escapeHtml(top.ex.n)} — best set so far is ${escapeHtml(formatSet(top.best.topSet))}. Ask me about your progress any time.`);
   } else {
     lines.push(`Ask me about your <b>workouts</b>, <b>diet</b> or <b>progress</b> — I’ll answer from your real logs.`);
   }
@@ -5377,14 +5856,14 @@ function coachDataSummary(user){
       const ex = exById(e.exId);
       const topW = Math.max(...e.sets.map(s=>setWeight(s)));
       const topS = e.sets.find(s=>setWeight(s)===topW) || e.sets[0];
-      return `${ex ? ex.n : e.exId} (${e.sets.length} sets, top ${topW}kg×${setReps(topS)})`;
+      return `${ex ? ex.n : e.exId} (${e.sets.length} sets, top ${formatSet(topS)})`;
     }).join('; ');
     return `${w.date} ${w.day}: ${exList}`;
   }).join('\n');
   const recentMeals = (user.mealLogs || []).slice(-10).map(m =>
     `${m.date} ${m.meal}: ${m.name} — ${Math.round(m.cal)}kcal, ${round1(m.p)}gP, ${round1(m.c)}gC, ${round1(m.f)}gF`
   ).join('\n');
-  const prsList = c.prs.filter(r=>r.ex).slice(0,5).map(r => `${r.ex.n}: ${r.best.topWeight}kg×${r.best.topReps}`).join(', ');
+  const prsList = c.prs.filter(r=>r.ex).slice(0,5).map(r => `${r.ex.n}: ${formatSet(r.best.topSet)}`).join(', ');
   return `Name: ${firstName} (${user.profile ? user.profile.age+'yo '+(user.profile.sex||'')+', '+(user.profile.heightCm||'?')+'cm, '+(user.profile.weightKg||'?')+'kg, goal: '+(user.profile.goal||'?') : 'no profile set'})
 Split: ${user.splitType || 'not set'}
 Streak: ${c.streak} days | Total workouts: ${c.totalWorkouts} | Weekly avg: ~${c.overallWorkout.avgPerWeek}/week
@@ -5553,7 +6032,7 @@ async function saveNameChange(){
   if(!name){ errEl.textContent = 'Name can’t be empty.'; return; }
   if(name === appState.user.name) return;
   try{
-    const data = await apiCall('/api/auth/account', {name}, undefined, 'PATCH');
+    const data = await apiCall('/api/account', {name}, undefined, 'PATCH');
     applyAccountUpdate(data.user);
     profileBanner('Name updated.');
     renderProfile();
@@ -5567,7 +6046,7 @@ async function saveUsernameChange(){
   if(newUsername === appState.user.username){ return; }
   if(!/^[a-z0-9_]{3,20}$/.test(newUsername)){ errEl.textContent = 'Username: 3-20 chars, letters/numbers/underscore only.'; return; }
   try{
-    const data = await apiCall('/api/auth/account', {username: newUsername}, undefined, 'PATCH');
+    const data = await apiCall('/api/account', {username: newUsername}, undefined, 'PATCH');
     applyAccountUpdate(data.user);
     profileBanner('Username updated to “' + data.user.username + '”.');
     renderProfile();
@@ -5591,9 +6070,18 @@ async function submitChangePassword(){
   if(newPassword !== confirm){ err.textContent = 'New passwords do not match.'; return; }
 
   try{
-    const data = await apiCall('/api/auth/change-password', {currentPassword, newPassword}, undefined, 'POST', {allow401:true});
-    // Other devices are signed out; this one continues with a fresh token.
-    setSession(Object.assign({}, getSession(), {token: data.token}));
+    const s = getSession();
+    let fresh;
+    try{
+      fresh = await Auth.passwordGrant(appState.user.email, currentPassword);
+    }catch(e){
+      err.textContent = e.status === 400 || e.code === 'invalid_credentials' ? 'Current password is incorrect.' : e.message;
+      return;
+    }
+    await Auth.updateUser(fresh.access_token, { password: newPassword });
+    // Other devices are signed out; this one continues with the fresh session.
+    await Auth.logout(fresh.access_token, 'others');
+    setSession(Object.assign({}, s, sessionFromAuth(fresh), { username: s.username, email: s.email, name: s.name }));
   }catch(e){ err.textContent = e.message; return; }
 
   document.getElementById('cpCurrent').value = '';
@@ -5607,9 +6095,11 @@ async function saveEmailChange(){
   errEl.textContent = '';
   if(profileUi.emailStep === 'code'){
     const code = document.getElementById('pfEmailCode').value.trim();
-    if(!/^\d{6}$/.test(code)){ errEl.textContent = 'Enter the 6-digit code.'; return; }
+    if(!/^\d{6,10}$/.test(code)){ errEl.textContent = 'Enter the code from the email.'; return; }
     try{
-      const data = await apiCall('/api/auth/email/verify', {email: profileUi.newEmail, code});
+      await Auth.verify(profileUi.newEmail, code, 'email_change');
+      const data = { user: (await apiCall('/api/account', null, undefined, 'GET')).account };
+      if(!data.user || data.user.email !== profileUi.newEmail) data.user = Object.assign({}, data.user, { email: profileUi.newEmail });
       applyAccountUpdate(data.user);
       profileUi = {emailStep:null, newEmail:''};
       profileBanner('Email updated to ' + data.user.email + '.');
@@ -5621,8 +6111,8 @@ async function saveEmailChange(){
   if(newEmail === appState.user.email){ return; }
   if(!isValidEmail(newEmail)){ errEl.textContent = 'Enter a valid email address.'; return; }
   try{
-    const data = await apiCall('/api/auth/email/start', {email: newEmail});
-    profileUi = {emailStep:'code', newEmail, devCode: data.devCode};
+    await Auth.updateUser(await freshAccessToken(), { email: newEmail });
+    profileUi = {emailStep:'code', newEmail};
     renderProfile();
     const c = document.getElementById('pfEmailCode'); if(c) c.focus();
   }catch(e){ errEl.textContent = e.message; }
@@ -5663,7 +6153,17 @@ function refreshSidebarGoal(){
 }
 
 function parseDayNames(raw){
-  return (raw||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const out = [];
+  (raw||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(name => {
+    let n = name, k = 2;
+    while(out.some(o => o.toLowerCase() === n.toLowerCase())) n = name + ' ' + (k++);
+    out.push(n);
+  });
+  return out;
+}
+const CUSTOM_DAYS_HELP = 'List your days in the order you do them, separated by commas. Write "Rest" for each rest day, e.g. Push, Pull, Legs, Rest, Upper, Lower, Rest';
+function confirmNoRestDay(days){
+  return days.some(isRestDayName) || confirm('You haven’t added a rest day. Add "Rest" where your rest days fall so they don’t break your streak.\n\nTap OK if you train every day, or Cancel to add rest days.');
 }
 
 function changeSplitType(){
@@ -5673,10 +6173,11 @@ function changeSplitType(){
 
   if(newSplit === 'Custom'){
     const existingDays = user.splitType==='Custom' ? Object.keys(user.routine).join(', ') : '';
-    const raw = window.prompt('Name your training days, separated by commas (e.g. Chest & Triceps, Back & Biceps, Legs, Shoulders & Abs):', existingDays);
+    const raw = window.prompt(CUSTOM_DAYS_HELP + ':', existingDays);
     if(raw === null){ document.getElementById('pfSplit').value = user.splitType; return; }
     const days = parseDayNames(raw);
-    if(days.length===0){ alert('Enter at least one day name.'); document.getElementById('pfSplit').value = user.splitType; return; }
+    if(!days.some(d=>!isRestDayName(d))){ alert('Enter at least one training day.'); document.getElementById('pfSplit').value = user.splitType; return; }
+    if(!confirmNoRestDay(days)){ document.getElementById('pfSplit').value = user.splitType; return; }
     if(!confirm('This rebuilds your weekly days. Exercises for day names that no longer exist will be lost. Continue?')){
       document.getElementById('pfSplit').value = user.splitType; return;
     }
@@ -5704,10 +6205,11 @@ function changeSplitType(){
 
 function editCustomDays(){
   const user = currentUser();
-  const raw = window.prompt('Rename your training days, separated by commas:', Object.keys(user.routine).join(', '));
+  const raw = window.prompt(CUSTOM_DAYS_HELP + ':', Object.keys(user.routine).join(', '));
   if(raw === null) return;
   const days = parseDayNames(raw);
-  if(days.length===0){ alert('Enter at least one day name.'); return; }
+  if(!days.some(d=>!isRestDayName(d))){ alert('Enter at least one training day.'); return; }
+  if(!confirmNoRestDay(days)) return;
   const newRoutine = {};
   days.forEach(d => { newRoutine[d] = (user.routine[d]) || []; });
   user.routine = newRoutine;
@@ -5810,21 +6312,6 @@ function importFromPaste() {
     textarea.value = '';
   } catch (e) {
     if (errEl) errEl.textContent = 'That isn’t valid backup JSON (' + e.message + ').';
-  }
-}
-
-/* ---- Import from bundled backup file (shipped inside the APK) ---- */
-async function importFromBundled() {
-  var errEl = document.getElementById('importAuthError');
-  if (errEl) errEl.textContent = '';
-  try {
-    var resp = await fetch('./forgefit_backup.json', {cache:'no-store'});
-    if (!resp.ok) throw new Error(resp.status === 404 ? 'no bundled backup in this build' : 'HTTP ' + resp.status);
-    var data = await resp.json();
-    importApplyBackup(data, 'bundled', 'bundled backup');
-  } catch (e) {
-    const m = 'Couldn’t load the bundled backup: ' + e.message;
-    if (errEl && !getSession()) errEl.textContent = m; else toast(m, {tone:'outline'});
   }
 }
 
@@ -6021,7 +6508,7 @@ async function deleteAccount(){
   if(typed.trim().toLowerCase() !== user.username){ toast('Username didn’t match — account not deleted.', {tone:'outline'}); return; }
 
   try{
-    await apiCall('/api/auth/me', null, undefined, 'DELETE');
+    await apiCall('/api/account', null, undefined, 'DELETE');
   }catch(e){
     toast('Couldn’t delete your account: ' + e.message + ' Nothing was deleted.', {tone:'outline', duration:8000});
     return;
@@ -6107,7 +6594,7 @@ function renderProfile(){
         ${profileUi.emailStep === 'code' ? `
           ${profileUi.devCode ? `<div class="otp-banner"><p><b>Development mode:</b> code for ${escapeHtml(profileUi.newEmail)}</p><div class="code">${escapeHtml(profileUi.devCode)}</div></div>` : `<p class="small faint" style="margin-bottom:8px;">We sent a code to <b>${escapeHtml(profileUi.newEmail)}</b>. Enter it to confirm the change.</p>`}
           <div class="cluster" style="flex-wrap:nowrap;">
-            <input id="pfEmailCode" class="input input--otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="······" style="flex:1;min-width:0;">
+            <input id="pfEmailCode" class="input input--otp" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="······" style="flex:1;min-width:0;">
             <button class="btn btn--primary" type="button" onclick="withLoading(this,'Verifying…',saveEmailChange)()">Confirm</button>
           </div>
           <button class="link-btn" type="button" style="margin-top:8px;" onclick="cancelEmailChange()">Cancel email change</button>
@@ -6231,9 +6718,9 @@ function renderProfile(){
             </select>
           </div>
           <div class="cluster">
-            ${Object.keys(user.routine||{}).map(d=>`<span class="pill" style="text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:12px;">${escapeHtml(d)}</span>`).join('')}
+            ${Object.keys(user.routine||{}).map(d=>`<span class="pill" style="text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:12px;${isRestDayName(d)?'opacity:.6;border-style:dashed;':''}">${escapeHtml(d)}</span>`).join('')}
           </div>
-          ${user.splitType==='Custom' ? `<button class="btn btn--ghost btn--sm" type="button" onclick="editCustomDays()" style="margin-top:12px;">${icon('edit','i--sm')}Edit day names</button>` : ''}
+          ${user.splitType==='Custom' ? `<div class="field-hint" style="margin-top:10px;">Rest days (named “Rest”) keep your streak going and aren’t counted as workouts.</div><button class="btn btn--ghost btn--sm" type="button" onclick="editCustomDays()" style="margin-top:12px;">${icon('edit','i--sm')}Edit days</button>` : ''}
         </div>
       </div>
 
@@ -6308,7 +6795,7 @@ boot();
       var openModal = document.querySelector('.modal-overlay.active');
       var sidebar = document.getElementById('sidebar');
       if(openModal){
-        ({workoutHistoryModal: closeWorkoutHistory, stepsModal: closeStepsModal, photoModal: closePhotoModal, importModal: closeImportModal}[openModal.id] || function(){ openModal.classList.remove('active'); })();
+        ({workoutHistoryModal: closeWorkoutHistory, stepsModal: closeStepsModal, dayDietModal: closeDayDiet, photoModal: closePhotoModal, importModal: closeImportModal}[openModal.id] || function(){ openModal.classList.remove('active'); })();
       } else if(sidebar && sidebar.classList.contains('open')){
         sidebar.classList.remove('open');
       } else if(document.getElementById('app').classList.contains('active') && currentViewName !== 'dashboard'){

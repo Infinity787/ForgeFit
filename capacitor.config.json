@@ -5,9 +5,18 @@
   "server": {
     "androidScheme": "https",
     "cleartext": true,
-    "allowNavigation": ["*"]
+    "allowNavigation": [
+      "*"
+    ]
   },
   "android": {
     "allowMixedContent": true
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_forgefit",
+      "iconColor": "#FFFFFF",
+      "sound": "rest_done.wav"
+    }
   }
 }

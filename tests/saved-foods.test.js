@@ -25,8 +25,8 @@ function mockServer(state) {
   server.fetch = async (url, opts = {}) => {
     const p = new URL(url).pathname;
     const json = (status, body) => ({ ok: status < 300, status, json: async () => body });
-    if (p === '/api/data' && (opts.method || 'GET') === 'GET') return json(200, { ok: true, state });
-    if (p === '/api/data/sync') { server.ops.push(...JSON.parse(opts.body).ops); return json(200, { ok: true }); }
+    if (p.endsWith('/api/data') && (opts.method || 'GET') === 'GET') return json(200, { ok: true, state });
+    if (p.endsWith('/api/data/sync')) { server.ops.push(...JSON.parse(opts.body).ops); return json(200, { ok: true }); }
     return json(404, { error: 'Not found.' });
   };
   return server;
@@ -52,7 +52,7 @@ async function launch(server, storage) {
   return w;
 }
 
-const SESSION = { forgefit_session_v1: JSON.stringify({ username: 'lifter', mode: 'backend', token: 't', email: 'lifter@example.com', name: 'Test Lifter' }) };
+const SESSION = { forgefit_session_v1: JSON.stringify({ username: 'lifter', mode: 'supabase', access_token: 't', refresh_token: 'r', expires_at: Date.now() + 3600e3, email: 'lifter@example.com', name: 'Test Lifter' }) };
 const deviceStorage = (w) => Object.fromEntries(Object.keys(w.localStorage).map((k) => [k, w.localStorage.getItem(k)]));
 const val = (w, id, v) => { w.document.getElementById(id).value = v; };
 
@@ -109,22 +109,31 @@ test('leaving "Save to My foods" unticked only logs the food', async () => {
   assert.doesNotMatch(w.document.getElementById('view-diet').textContent, /My foods/);
 });
 
-test('a saved food logs again in one tap, scaled by servings', async () => {
+test('a saved food logs again in one tap, with calories and protein adjustable first', async () => {
   const server = mockServer(userState({ savedFoods: [{ id: 'sf_shake', n: 'Protein shake', serving: '1 scoop + milk', cal: 260, p: 34, c: 14, f: 7 }] }));
   const w = await launch(server, SESSION);
   w.goToView('diet');
   w.setDietMeal('Snack');
-  val(w, 'sqty_sf_shake', '1.5');
-  w.addSavedFood('sf_shake');
+  assert.equal(w.document.getElementById('scal_sf_shake').value, '260', 'starts with the saved calories');
+  assert.equal(w.document.getElementById('sp_sf_shake').value, '34', 'and the saved protein');
+
+  w.addSavedFood('sf_shake'); // as saved
+  val(w, 'scal_sf_shake', '180');
+  val(w, 'sp_sf_shake', '25');
+  w.addSavedFood('sf_shake'); // adjusted
   await tick(400);
 
-  const meal = plain(w.currentUser().mealLogs[0]);
-  assert.equal(meal.meal, 'Snack');
-  assert.equal(meal.name, 'Protein shake');
-  assert.equal(meal.servings, 1.5);
-  assert.deepEqual([meal.cal, meal.p, meal.c, meal.f], [390, 51, 21, 10.5]);
-  assert.equal(meal.foodId, 'sf_shake');
+  const [asSaved, adjusted] = plain(w.currentUser().mealLogs);
+  assert.deepEqual([asSaved.meal, asSaved.name, asSaved.cal, asSaved.p, asSaved.c, asSaved.f], ['Snack', 'Protein shake', 260, 34, 14, 7]);
+  assert.deepEqual([adjusted.cal, adjusted.p, adjusted.c, adjusted.f, adjusted.servings], [180, 25, 14, 7, 1]);
+  assert.equal(adjusted.foodId, 'sf_shake');
+  assert.deepEqual(plain(w.currentUser().savedFoods)[0], { id: 'sf_shake', n: 'Protein shake', serving: '1 scoop + milk', cal: 260, p: 34, c: 14, f: 7 }, 'the saved food itself is unchanged');
   assert.ok(server.ops.some((o) => o.type === 'meal.upsert'));
+
+  // Invalid numbers are refused.
+  val(w, 'scal_sf_shake', '-5');
+  w.addSavedFood('sf_shake');
+  assert.equal(w.currentUser().mealLogs.length, 2);
 });
 
 test('saving the same name again updates the saved food instead of duplicating it', async () => {

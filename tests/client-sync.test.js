@@ -28,7 +28,7 @@ const normalizeUser = plain(ctx.api.normalizeUser);
 const clone = plain(ctx.api.clone);
 const { datasetFingerprint, datasetHasData, describeCounts, datasetCounts, saveMessage } = ctx.api;
 
-const legacy = require('../backend/test/fixtures/legacy-backup.json');
+const legacy = require('./fixtures/legacy-backup.json');
 const base = () => normalizeUser(clone({
   username: 'k', name: 'K', onboarded: true, splitType: 'PPL', profile: { age: 20 }, targets: { calories: 2000 },
   routine: { Push: ['ex1'], Pull: [] }, customExercises: [],

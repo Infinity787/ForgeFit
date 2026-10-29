@@ -1,8 +1,0 @@
-node_modules/
-.env
-.env.*
-!.env.example
-data/
-*.log
-*.sqlite*
-.DS_Store

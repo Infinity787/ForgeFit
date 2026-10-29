@@ -1,7 +1,7 @@
 // Caches the app shell so ForgeFit opens offline. API calls go to a
 // different origin and are never cached here — account data is always
 // fetched live (the app keeps its own offline copy and sync queue).
-const CACHE_VERSION = 'forgefit-v4-logo';
+const CACHE_VERSION = 'forgefit-v5-supabase';
 const APP_SHELL = [
   './',
   './index.html',
@@ -37,7 +37,7 @@ self.addEventListener('fetch', (event) => {
   // Network-first so updates land immediately; fall back to cache offline.
   event.respondWith(
     fetch(req).then(res => {
-      if (res && res.status === 200 && !url.pathname.endsWith('forgefit_backup.json')) {
+      if (res && res.status === 200) {
         const copy = res.clone();
         caches.open(CACHE_VERSION).then(cache => cache.put(req, copy));
       }

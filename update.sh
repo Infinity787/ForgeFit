@@ -1,12 +1,13 @@
 #!/bin/bash
+# Builds the Android app, copies it to ./ForgeFit.apk and installs it on the
+# phone connected over USB (keeps the app's data).
 set -e
+export ANDROID_HOME=~/Library/Android/sdk
 echo "📦 Syncing web assets..."
-cp index.html www/index.html
-ANDROID_HOME=~/Library/Android/sdk npx cap sync android 2>&1 | tail -3
+npm run android:copy --silent
 echo "🔨 Building APK..."
-cd android && JAVA_HOME=/Users/krishna/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home ANDROID_HOME=~/Library/Android/sdk ./gradlew assembleDebug 2>&1 | tail -3
-cd ..
+(cd android && JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew assembleDebug -q)
 cp android/app/build/outputs/apk/debug/app-debug.apk ./ForgeFit.apk
 echo "📱 Installing to device..."
-~/Library/Android/sdk/platform-tools/adb install -r ./ForgeFit.apk
+"$ANDROID_HOME/platform-tools/adb" install -r ./ForgeFit.apk
 echo "✅ Done! Data preserved."

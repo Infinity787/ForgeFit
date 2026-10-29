@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "hono": "npm:hono@4.13.13",
+    "hono/cors": "npm:hono@4.13.13/cors",
+    "pg": "npm:pg@8.23.1"
+  }
+}

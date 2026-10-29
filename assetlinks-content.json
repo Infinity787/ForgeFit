@@ -1,8 +1,0 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "app.netlify.forge_fit_tracker.twa",
-        "sha256_cert_fingerprints": ["4C:16:6A:A7:FA:EE:EC:7A:50:F8:91:86:A0:44:79:76:86:F4:6A:B8:AE:0F:7F:53:03:4A:1F:3A:64:35:F7:AF"]
-      }
-    }]

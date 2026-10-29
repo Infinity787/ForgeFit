@@ -30,15 +30,15 @@ function mockServer(states) {
     const auth = (opts.headers || {}).Authorization || '';
     const who = auth.replace('Bearer token-', '');
     const json = (status, body) => ({ ok: status < 300, status, json: async () => body });
-    if (p === '/api/data' && (opts.method || 'GET') === 'GET') return json(200, { ok: true, state: states[who] });
-    if (p === '/api/data/sync') { server.ops.push(...JSON.parse(opts.body).ops); return json(200, { ok: true }); }
+    if (p.endsWith('/api/data') && (opts.method || 'GET') === 'GET') return json(200, { ok: true, state: states[who] });
+    if (p.endsWith('/api/data/sync')) { server.ops.push(...JSON.parse(opts.body).ops); return json(200, { ok: true }); }
     return json(404, { error: 'Not found.' });
   };
   return server;
 }
 
 function session(username) {
-  return JSON.stringify({ username, mode: 'backend', token: 'token-' + username, email: username + '@example.com', name: 'Test Lifter' });
+  return JSON.stringify({ username, mode: 'supabase', access_token: 'token-' + username, refresh_token: 'r', expires_at: Date.now() + 3600e3, email: username + '@example.com', name: 'Test Lifter' });
 }
 
 /** Starts the app in a fresh window with the given device storage (a "process start"). */
