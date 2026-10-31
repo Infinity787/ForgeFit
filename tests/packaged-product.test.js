@@ -122,3 +122,56 @@ test('the online food search is gone from Diet', async () => {
   assert.equal(typeof w.searchOnlineFood, 'undefined');
   assert.ok(w.document.querySelector('[aria-label="Filter the food library"]'), 'the library filter stays');
 });
+
+const PLATE = {
+  isFood: true, imageQuality: 'good', qualityNote: '', dishName: 'Dal chawal', confidence: 'medium', assumptions: 'Home-style dal.',
+  items: [
+    { name: 'Steamed rice', portion: '1 cup', grams: 180, calories: 234, protein: 4.3, carbs: 51.5, fat: 0.5 },
+    { name: 'Toor dal', portion: '1 bowl', grams: 200, calories: 230, protein: 13.2, carbs: 34, fat: 4.4 },
+    { name: 'Papad', portion: '1 piece', grams: null, calories: 40, protein: 2, carbs: 6, fat: 1 },
+  ],
+  total: { calories: 504, protein: 19.5, carbs: 91.5, fat: 5.9 },
+  packaged: null,
+};
+const input = (w, id, v) => { const el = w.document.getElementById(id); el.value = v; el.dispatchEvent(new w.Event('input')); };
+
+test('a plate shows each item with its weight, and correcting a weight updates the totals', async () => {
+  const w = await snap(PLATE);
+  assert.equal(w.eval('photoState.stage'), 'review');
+  assert.equal(w.document.getElementById('pi_amt_0').value, '180');
+  assert.equal(val(w, 'pt_cal'), '504');
+  input(w, 'pi_amt_0', '270');   // 1.5× the rice
+  assert.equal(val(w, 'pi_mac_0'), '351 kcal · P 6.5 · C 77.3 · F 0.8');
+  assert.equal(val(w, 'pt_cal'), '621');
+  assert.equal(w.document.getElementById('pf_cal').value, '621');
+  input(w, 'pi_amt_2', '2');     // no weight given: counted in servings
+  assert.equal(val(w, 'pt_cal'), '661');
+  w.removePhotoItem(1);
+  assert.equal(val(w, 'pt_cal'), '431');
+  w.confirmPhotoLog();
+  await tick(10);
+  const m = w.eval('currentUser().mealLogs')[0];
+  assert.deepEqual([m.name, m.cal, m.p], ['Dal chawal', 431, 10.5]);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('totals can be overridden by hand, until a weight is changed again', async () => {
+  const w = await snap(PLATE);
+  input(w, 'pf_p', '30');
+  assert.equal(val(w, 'pt_p'), '30');
+  assert.equal(val(w, 'pt_cal'), '504');
+  input(w, 'pi_amt_1', '100');
+  assert.equal(val(w, 'pt_p'), '12.9');
+});
+
+test('a hint re-runs the estimate on the same photo', async () => {
+  const sent = [];
+  const w = await snap(PLATE);
+  w.__sent = sent;
+  w.eval(`const RealFD = FormData; window.FormData = class extends RealFD { append(k, v, n) { if (k === 'note') window.__sent.push(v); return n === undefined ? super.append(k, v) : super.append(k, v, n); } };`);
+  input(w, 'photoHint', 'dal has a spoon of ghee');
+  w.reestimatePhoto();
+  await tick(20);
+  assert.deepEqual(sent, ['dal has a spoon of ghee']);
+  assert.equal(w.eval('photoState.stage'), 'review');
+});

@@ -248,6 +248,7 @@ export function createApp({ db, verifyUser, authAdmin, limits = { ai: 60, login:
       raw = await gemini.generateJson({
         schema: ai.PHOTO_SCHEMA,
         temperature: 0.2,
+        thinkingBudget: 2048,
         signal: c.req.raw.signal,
         contents: [{
           role: 'user',

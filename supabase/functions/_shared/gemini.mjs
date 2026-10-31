@@ -6,7 +6,7 @@
 import { env } from './env.mjs';
 const API_BASE = () => env('GEMINI_API_BASE') || 'https://generativelanguage.googleapis.com/v1beta';
 export const MODEL = env('GEMINI_MODEL') || 'gemini-2.5-flash';
-const TIMEOUT_MS = () => Number(env('GEMINI_TIMEOUT_MS') || 45000);
+const TIMEOUT_MS = () => Number(env('GEMINI_TIMEOUT_MS') || 60000);
 
 export class AiError extends Error {
   constructor(message, status) {
@@ -24,7 +24,7 @@ export function configured() {
  * Calls generateContent. `signal` lets the caller cancel (e.g. when the app
  * aborts the upload). Returns the first candidate's text.
  */
-export async function generate({ system, contents, schema, temperature = 0.4, signal }) {
+export async function generate({ system, contents, schema, temperature = 0.4, thinkingBudget, signal }) {
   if (!configured()) throw new AiError('AI features aren’t configured on the server yet.', 503);
 
   const controller = new AbortController();
@@ -37,6 +37,7 @@ export async function generate({ system, contents, schema, temperature = 0.4, si
     generationConfig: {
       temperature,
       ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}),
+      ...(thinkingBudget ? { thinkingConfig: { thinkingBudget } } : {}),
     },
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
   };

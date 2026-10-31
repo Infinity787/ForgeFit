@@ -5369,7 +5369,7 @@ function resetPhotoState(){
     if(photoState.xhr) try{ photoState.xhr.abort(); }catch(e){}
     if(photoState.previewUrl) URL.revokeObjectURL(photoState.previewUrl);
   }
-  photoState = { stage:'pick', blob:null, previewUrl:null, progress:0, xhr:null, estimate:null, error:'', note:'', form:null, scale:1, meal: dietState.meal, warning:'', product:null, qty:0 };
+  photoState = { stage:'pick', blob:null, previewUrl:null, progress:0, xhr:null, estimate:null, error:'', note:'', form:null, items:[], manual:null, meal: dietState.meal, warning:'', product:null, qty:0 };
 }
 
 function openPhotoModal(){
@@ -5448,9 +5448,9 @@ function renderPhotoModal(){
 
   if(st.stage === 'product'){ body.innerHTML = renderProductReview(st); return; }
 
-  // review
+  // review: one row per item; weights can be corrected and the totals follow
   const e = st.estimate, f = st.form;
-  const scaled = (k) => k === 'cal' ? Math.round(f[k] * st.scale) : round1(f[k] * st.scale);
+  const tot = photoTotals(st);
   body.innerHTML = `
     ${st.previewUrl ? `<div class="photo-preview" style="max-height:150px;aspect-ratio:16/7;"><img src="${st.previewUrl}" alt="Your meal photo"></div>` : ''}
     ${e.imageQuality === 'poor' ? `<div class="notice notice--dashed" style="margin-top:12px;">${icon('alert')}<div class="notice__body small"><b>Low-quality photo.</b> ${escapeHtml(e.qualityNote || 'The food was hard to see, so these numbers are rough.')}</div></div>` : ''}
@@ -5460,33 +5460,48 @@ function renderPhotoModal(){
       <span class="label">AI estimate</span>
       <span class="small faint" style="display:flex;align-items:center;gap:8px;">${confidenceMeter(e.confidence)}${e.confidence} confidence</span>
     </div>
-    <p class="small faint" style="margin-bottom:14px;">Estimates only. Portion size, cooking oil and hidden ingredients can change the real numbers a lot — check them and edit before adding.</p>
+    <p class="small faint" style="margin-bottom:14px;">Portion size is the hardest part to judge from a photo. Correct the weights if they look off — the macros update as you type.</p>
 
     <div class="field">
       <label for="pfFoodName">Food name</label>
       <input id="pfFoodName" maxlength="120" value="${escapeHtml(f.name)}" oninput="photoState.form.name=this.value">
     </div>
-    <div class="field">
-      <label for="pfPortion">Portion</label>
-      <input id="pfPortion" maxlength="80" value="${escapeHtml(f.portion)}" oninput="photoState.form.portion=this.value">
+
+    <span class="label" style="display:block;margin-bottom:6px;">On the plate</span>
+    <div class="stack" style="gap:6px;" id="photoItems">
+      ${st.items.map((it,i)=> it.removed ? '' : `<div class="row" style="padding:8px 6px 8px 12px;">
+        <div class="row__main">
+          <div class="row__title" style="font-size:13.5px;white-space:normal;">${escapeHtml(it.name)}</div>
+          <div class="row__meta num" id="pi_mac_${i}">${itemMacroText(it)}</div>
+        </div>
+        <div class="cluster" style="flex-wrap:nowrap;gap:6px;">
+          <input id="pi_amt_${i}" class="input input--sm input--num" type="number" inputmode="decimal" min="0" step="${it.unit==='g'?5:0.25}" value="${it.amount}" aria-label="${it.unit==='g'?'Grams':'Servings'} of ${escapeHtml(it.name)}" style="width:66px;" oninput="setPhotoItemAmount(${i}, this.value)"><span class="unit">${it.unit}</span>
+          <button class="x-btn" type="button" onclick="removePhotoItem(${i})" aria-label="Remove ${escapeHtml(it.name)}">${icon('x','i--sm')}</button>
+        </div>
+      </div>`).join('')}
     </div>
-    <div class="field">
-      <span class="label" style="display:block;margin-bottom:7px;">How much did you eat?</span>
-      <div class="segmented" role="group" aria-label="Portion multiplier">
-        ${[0.5,0.75,1,1.5,2].map(v=>`<button type="button" class="${st.scale===v?'active':''}" onclick="setPhotoScale(${v})">${v===1?'As pictured':v+'×'}</button>`).join('')}
+
+    <div class="spread" style="margin:16px 0 8px;"><span class="label">Total</span></div>
+    <div class="macro-tiles macro-tiles--total" aria-live="polite">${macroTilesHTML(tot, 'pt')}</div>
+    <details style="margin-top:8px;"${st.manual ? ' open' : ''}>
+      <summary class="small" style="cursor:pointer;color:var(--fg-2);">Know the exact numbers? Edit the totals</summary>
+      <div class="macro-edit" style="margin-top:10px;">
+        ${[['cal','Calories','kcal'],['p','Protein','g'],['c','Carbs','g'],['f','Fat','g']].map(([k,label,unit])=>`
+          <div class="field" style="margin-bottom:0;">
+            <label for="pf_${k}">${label} <span class="opt">${unit}</span></label>
+            <input id="pf_${k}" type="number" inputmode="decimal" min="0" step="${k==='cal'?1:0.1}" value="${tot[k]}" oninput="setPhotoTotal('${k}', this.value)">
+          </div>`).join('')}
+      </div>
+    </details>
+    ${e.assumptions ? `<p class="small faint" style="margin-top:10px;">Assumed: ${escapeHtml(e.assumptions)}</p>` : ''}
+
+    <div class="field" style="margin:16px 0 0;">
+      <label for="photoHint">Something off? Tell the AI <span class="opt">optional</span></label>
+      <div class="cluster" style="flex-wrap:nowrap;">
+        <input id="photoHint" maxlength="200" style="flex:1;min-width:0;" placeholder="e.g. it’s egg bhurji, 3 eggs, made in butter" value="${escapeHtml(st.note)}" oninput="photoState.note=this.value" onkeydown="if(event.key==='Enter')reestimatePhoto()">
+        <button class="btn btn--ghost" type="button" onclick="reestimatePhoto()">${icon('refresh','i--sm')}<span class="hide-sm">Re-estimate</span></button>
       </div>
     </div>
-    <div class="macro-edit" style="margin-bottom:6px;">
-      ${[['cal','Calories','kcal'],['p','Protein','g'],['c','Carbs','g'],['f','Fat','g']].map(([k,label,unit])=>`
-        <div class="field" style="margin-bottom:0;">
-          <label for="pf_${k}">${label} <span class="opt">${unit}</span></label>
-          <input id="pf_${k}" type="number" inputmode="decimal" min="0" step="${k==='cal'?1:0.1}" value="${scaled(k)}" oninput="updatePhotoMacro('${k}', this.value)">
-        </div>`).join('')}
-    </div>
-    ${e.items.length > 1 ? `<details style="margin-top:12px;"><summary class="small" style="cursor:pointer;color:var(--fg-2);">What we identified (${e.items.length} items)</summary>
-      <div style="margin-top:8px;">${e.items.map(i=>`<div class="row row--plain" style="padding:8px 0;"><div class="row__main"><div class="row__title" style="font-size:13px;">${escapeHtml(i.name)}</div><div class="row__meta">${escapeHtml(i.portion)}${i.grams ? ' · ~'+i.grams+' g' : ''}</div></div><span class="num small faint">${i.calories} kcal · P ${i.protein}</span></div>`).join('')}</div>
-    </details>` : ''}
-    ${e.assumptions ? `<p class="small faint" style="margin-top:10px;">Assumed: ${escapeHtml(e.assumptions)}</p>` : ''}
 
     <div class="field" style="margin:16px 0 0;">
       <label for="pfMeal">Add to</label>
@@ -5627,12 +5642,9 @@ async function uploadPhoto(){
       return;
     }
     st.estimate = est;
-    st.form = {
-      name: est.dishName,
-      portion: est.items.length === 1 ? est.items[0].portion : 'As pictured',
-      cal: est.total.calories, p: est.total.protein, c: est.total.carbs, f: est.total.fat
-    };
-    st.scale = 1;
+    st.form = { name: est.dishName };
+    st.items = est.items.map(photoItem);
+    st.manual = null;
     if(est.packaged){
       const pk = est.packaged;
       st.product = { ...pk, per100: { ...pk.per100 } };
@@ -5659,17 +5671,56 @@ function cancelPhotoUpload(){
   toast('Photo estimate cancelled.', {tone:'outline'});
 }
 
-function setPhotoScale(v){
-  // Macros are stored at the 1× baseline (manual edits included), so a
-  // new multiplier simply rescales them.
-  photoState.scale = v;
+// Each item keeps its macros per gram (or per serving when the AI gave no
+// weight), so a corrected amount rescales just that item.
+function photoItem(i){
+  const base = i.grams || 1;
+  return { name: i.name, unit: i.grams ? 'g' : '×', amount: base, removed: false,
+    per: { cal: i.calories/base, p: i.protein/base, c: i.carbs/base, f: i.fat/base } };
+}
+function itemMacros(it){
+  return { cal: Math.round(it.per.cal*it.amount), p: round1(it.per.p*it.amount), c: round1(it.per.c*it.amount), f: round1(it.per.f*it.amount) };
+}
+function itemMacroText(it){
+  const m = itemMacros(it);
+  return m.cal + ' kcal · P ' + m.p + ' · C ' + m.c + ' · F ' + m.f;
+}
+function photoTotals(st){
+  if(st.manual) return { ...st.manual };
+  const t = { cal:0, p:0, c:0, f:0 };
+  st.items.filter(it=>!it.removed).forEach(it=>{ const m = itemMacros(it); for(const k in t) t[k] += m[k]; });
+  return { cal: Math.round(t.cal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
+}
+function refreshPhotoTotals(skipInputs){
+  const tot = photoTotals(photoState);
+  for(const k of ['cal','p','c','f']){
+    const tile = document.getElementById('pt_'+k); if(tile) tile.textContent = tot[k];
+    const input = document.getElementById('pf_'+k); if(input && !skipInputs) input.value = tot[k];
+  }
+}
+function setPhotoItemAmount(i, raw){
+  const v = parseFloat(raw), it = photoState.items[i];
+  it.amount = isNaN(v) || v < 0 ? 0 : v;
+  photoState.manual = null;   // the totals follow the items again
+  const meta = document.getElementById('pi_mac_'+i);
+  if(meta) meta.textContent = itemMacroText(it);
+  refreshPhotoTotals();
+}
+function removePhotoItem(i){
+  photoState.items[i].removed = true;
+  photoState.manual = null;
   renderPhotoModal();
 }
-
-function updatePhotoMacro(k, raw){
+function setPhotoTotal(k, raw){
   const v = parseFloat(raw);
   if(isNaN(v) || v < 0) return;
-  photoState.form[k] = v / photoState.scale;
+  photoState.manual = { ...photoTotals(photoState), [k]: v };
+  refreshPhotoTotals(true);
+}
+function reestimatePhoto(){
+  const hint = document.getElementById('photoHint');
+  if(hint) photoState.note = hint.value.trim().slice(0, 200);
+  uploadPhoto();
 }
 
 /* ---------- Packaged product: macros scale with the quantity eaten ---------- */
@@ -5802,23 +5853,18 @@ function confirmPhotoLog(){
   const err = document.getElementById('photoFormError');
   err.textContent = '';
   const name = (st.form.name || '').trim();
-  const portion = (st.form.portion || '').trim();
-  const vals = {};
-  for(const [k,label] of [['cal','Calories'],['p','Protein'],['c','Carbs'],['f','Fat']]){
-    const v = parseFloat(document.getElementById('pf_'+k).value);
-    if(isNaN(v) || v < 0){ err.textContent = 'Enter a valid number for ' + label.toLowerCase() + '.'; document.getElementById('pf_'+k).focus(); return; }
-    vals[k] = v;
-  }
   if(!name){ err.textContent = 'Give this food a name.'; document.getElementById('pfFoodName').focus(); return; }
-  if(vals.cal > 20000){ err.textContent = 'That calorie number looks too high to log.'; return; }
+  const tot = photoTotals(st);
+  if(!tot.cal && !tot.p && !tot.c && !tot.f){ err.textContent = 'There’s nothing to log — add an item back or retake the photo.'; return; }
+  if(tot.cal > 20000){ err.textContent = 'That calorie number looks too high to log.'; return; }
 
   const user = currentUser();
   user.mealLogs.push({
     uid: newId('m'),
     date: todayStr(), meal: st.meal, foodId: null,
-    name: (name + (portion ? ' — ' + portion : '') + (st.scale !== 1 ? ' ×' + st.scale : '')).slice(0, 200),
-    servings: st.scale, qtyUnit: 'photo', qtyAmount: st.scale,
-    cal: round1(vals.cal), p: round1(vals.p), c: round1(vals.c), f: round1(vals.f),
+    name: name.slice(0, 200),
+    servings: 1, qtyUnit: 'photo', qtyAmount: 1,
+    cal: tot.cal, p: tot.p, c: tot.c, f: tot.f,
     source: 'photo'
   });
   const meal = st.meal;

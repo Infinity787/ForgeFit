@@ -138,6 +138,24 @@ test('AI endpoints require a session', async () => {
   assert.equal((await request(app).post('/api/ai/coach').send({ message: 'hi' })).status, 401);
 });
 
+test('item macros come from the estimated weight × per-100 values, with calories checked', async () => {
+  nextResponse = { status: 200, text: {
+    is_food: true, image_quality: 'good', dish_name: 'Rice and chicken', confidence: 'medium',
+    items: [
+      // Model arithmetic is off (says 400 kcal); weight × per-100 gives 234.
+      { name: 'Steamed rice', portion: '1 cup', grams: 180, per_100: { calories: 130, protein: 2.4, carbs: 28.6, fat: 0.3 }, calories: 400, protein: 1, carbs: 1, fat: 1 },
+      // Per-100 calories don't match the macros (4/4/9): corrected to 179.
+      { name: 'Chicken curry', portion: '1 bowl', grams: 200, per_100: { calories: 500, protein: 15, carbs: 5, fat: 11 }, calories: 1000, protein: 30, carbs: 10, fat: 22 },
+    ],
+  } };
+  const e = (await photo(JPEG)).body.estimate;
+  assert.deepEqual(e.items.map((i) => [i.grams, i.calories, i.protein, i.carbs, i.fat]), [[180, 234, 4.3, 51.5, 0.5], [200, 358, 30, 10, 22]]);
+  assert.equal(e.total.calories, 592);
+  const body = calls[0].body;
+  assert.match(body.contents[0].parts[1].text, /per_100/);
+  assert.equal(body.generationConfig.thinkingConfig.thinkingBudget, 2048);
+});
+
 test('packaged products come back with the exact product and per-100 values', async () => {
   nextResponse = { status: 200, text: {
     is_food: true, image_quality: 'good', dish_name: 'Protein bar', confidence: 'high',

@@ -44,10 +44,12 @@ export const PHOTO_SCHEMA = {
         properties: {
           name: { type: 'STRING' },
           portion: { type: 'STRING' },
+          size_reasoning: { type: 'STRING' },
           grams: { type: 'NUMBER' },
+          per_100: NUTRIENTS,
           ...NUTRIENTS.properties,
         },
-        required: ['name', 'portion', 'calories', 'protein', 'carbs', 'fat'],
+        required: ['name', 'portion', 'grams', 'per_100', 'calories', 'protein', 'carbs', 'fat'],
       },
     },
     confidence: { type: 'STRING', enum: ['low', 'medium', 'high'] },
@@ -71,11 +73,15 @@ export const PHOTO_SCHEMA = {
   required: ['is_food', 'image_quality', 'dish_name', 'items', 'confidence'],
 };
 
-export const PHOTO_PROMPT = `You are a careful sports nutritionist estimating the nutrition of a meal from a single photo.
-Identify each distinct food item visible, estimate its portion (in everyday terms AND grams), and estimate calories (kcal), protein, carbs and fat (grams) for THAT portion.
+export const PHOTO_PROMPT = `You are a careful sports nutritionist estimating the nutrition of a meal from a single photo. Work it out step by step for each item.
+1. Identify each distinct food item visible, as specifically as possible (e.g. "Chicken curry (bone-in, oil-based gravy)", not "Curry"). Note the cooking method you can see (fried, grilled, gravy, dry, buttered).
+2. Estimate its weight in grams. Use reference objects for scale: a dinner plate is about 26 cm across, a quarter plate about 18 cm, a katori/small bowl holds about 150 ml, a tablespoon about 15 ml, a fist is about 1 cup, an adult palm is about 8 cm wide. Typical weights: 1 roti/chapati ~40 g, 1 phulka ~30 g, 1 paratha ~80 g, 1 idli ~40 g, 1 medium dosa ~100 g, 1 cup cooked rice ~180 g, 1 bowl dal ~200 g, 1 large egg ~50 g, 1 slice bread ~30 g. Write the reasoning briefly in size_reasoning (e.g. "rice covers a third of a 26 cm plate, ~3 cm high").
+3. Give per_100: nutrition per 100 g of the item AS COOKED AND SERVED, from standard food composition data (IFCT for Indian foods, USDA otherwise), including the oil, ghee, butter or sugar typically used in that preparation.
+4. calories/protein/carbs/fat for the item = per_100 × grams / 100.
 Rules:
-- Base estimates on typical recipes; assume common home/restaurant preparation unless clearly visible otherwise (e.g. fried vs grilled).
-- Use visual cues (plate size, utensils, hands) to judge portion size. If there are no cues, assume a standard single serving and say so in "assumptions".
+- Assume common home/restaurant preparation unless clearly visible otherwise. Visible oil, a glossy gravy or a fried coating means more fat — account for it.
+- If there are no scale cues, assume a standard single serving and say so in "assumptions".
+- Check per_100: calories should be close to 4×protein + 4×carbs + 9×fat.
 - If the image does not show food, set is_food=false and items=[].
 - If the photo is too dark, blurry, cropped or obstructed to judge, set image_quality="poor" and explain briefly in quality_note.
 - confidence reflects how sure you are about the portion and ingredients overall.
@@ -88,16 +94,39 @@ Packaged products (a bar, packet, can, bottle, tub, box, pouch...):
 - Still fill items/dish_name with the whole pack as one item.
 For a plate of food that isn't a packaged product, set packaged.is_packaged=false.`;
 
-export function normalisePhotoEstimate(raw) {
-  const items = (Array.isArray(raw && raw.items) ? raw.items : []).slice(0, 12).map((it) => ({
+/**
+ * Per-100 g values, with calories corrected when they don't match the
+ * macros (4 kcal/g protein and carbs, 9 kcal/g fat) by more than 20%.
+ */
+function per100Of(n) {
+  if (!n) return null;
+  const p = round1(clamp(n.protein, 0, 100)), c = round1(clamp(n.carbs, 0, 100)), f = round1(clamp(n.fat, 0, 100));
+  let cal = Math.round(clamp(n.calories, 0, 900));
+  const fromMacros = Math.round(4 * p + 4 * c + 9 * f);
+  if (fromMacros > 0 && Math.abs(cal - fromMacros) > Math.max(20, 0.2 * fromMacros)) cal = Math.min(900, fromMacros);
+  if (!cal && !p && !c && !f) return null;
+  return { calories: cal, protein: p, carbs: c, fat: f };
+}
+
+function normaliseItem(it) {
+  const grams = Number(it.grams) > 0 ? Math.round(clamp(it.grams, 1, 5000)) : null;
+  const per100 = per100Of(it.per_100);
+  // Item totals come from weight × per-100 values when both are known, so
+  // a corrected weight in the app scales them the same way.
+  const k = grams && per100 ? grams / 100 : null;
+  return {
     name: String(it.name || 'Food item').slice(0, 80),
     portion: String(it.portion || '').slice(0, 80),
-    grams: it.grams == null ? null : Math.round(clamp(it.grams, 0, 5000)),
-    calories: Math.round(clamp(it.calories, 0, 5000)),
-    protein: round1(clamp(it.protein, 0, 500)),
-    carbs: round1(clamp(it.carbs, 0, 1000)),
-    fat: round1(clamp(it.fat, 0, 500)),
-  }));
+    grams,
+    calories: Math.round(k ? per100.calories * k : clamp(it.calories, 0, 5000)),
+    protein: round1(k ? per100.protein * k : clamp(it.protein, 0, 500)),
+    carbs: round1(k ? per100.carbs * k : clamp(it.carbs, 0, 1000)),
+    fat: round1(k ? per100.fat * k : clamp(it.fat, 0, 500)),
+  };
+}
+
+export function normalisePhotoEstimate(raw) {
+  const items = (Array.isArray(raw && raw.items) ? raw.items : []).slice(0, 12).map(normaliseItem);
   // Totals are recomputed from the items so they always add up.
   const total = items.reduce((t, i) => ({
     calories: t.calories + i.calories, protein: round1(t.protein + i.protein),
