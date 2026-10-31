@@ -52,6 +52,21 @@ export const PHOTO_SCHEMA = {
     },
     confidence: { type: 'STRING', enum: ['low', 'medium', 'high'] },
     assumptions: { type: 'STRING' },
+    packaged: {
+      type: 'OBJECT',
+      properties: {
+        is_packaged: { type: 'BOOLEAN' },
+        brand: { type: 'STRING' },
+        product_name: { type: 'STRING' },
+        variant: { type: 'STRING' },
+        unit: { type: 'STRING', enum: ['g', 'ml'] },
+        net_quantity: { type: 'NUMBER' },
+        serving_size: { type: 'NUMBER' },
+        values_source: { type: 'STRING', enum: ['label', 'known'] },
+        per_100: NUTRIENTS,
+      },
+      required: ['is_packaged'],
+    },
   },
   required: ['is_food', 'image_quality', 'dish_name', 'items', 'confidence'],
 };
@@ -65,7 +80,13 @@ Rules:
 - If the photo is too dark, blurry, cropped or obstructed to judge, set image_quality="poor" and explain briefly in quality_note.
 - confidence reflects how sure you are about the portion and ingredients overall.
 - Keep names short (e.g. "Paneer butter masala", "Steamed basmati rice").
-- Never invent brand names. Numbers must be realistic for the portion.`;
+- Numbers must be realistic for the portion.
+Packaged products (a bar, packet, can, bottle, tub, box, pouch...):
+- Set packaged.is_packaged=true and identify the exact product from the packaging: brand, product_name and variant/flavour (e.g. brand "Amul", product_name "High Protein Milk", variant "Chocolate"). Only use words you can read on the pack; leave a field empty if it isn't visible. Never guess a brand.
+- unit is "g" for solids and "ml" for drinks. net_quantity is the pack size printed on it (e.g. 200 for "200 ml"); serving_size is the label's serving size if printed.
+- per_100 is the nutrition per 100 g or 100 ml. If the nutrition table is readable, copy it (converting per-serving values to per 100) and set values_source="label". Otherwise use the known values for that exact product and set values_source="known".
+- Still fill items/dish_name with the whole pack as one item.
+For a plate of food that isn't a packaged product, set packaged.is_packaged=false.`;
 
 export function normalisePhotoEstimate(raw) {
   const items = (Array.isArray(raw && raw.items) ? raw.items : []).slice(0, 12).map((it) => ({
@@ -92,20 +113,34 @@ export function normalisePhotoEstimate(raw) {
     total,
     confidence: ['low', 'medium', 'high'].includes(raw && raw.confidence) ? raw.confidence : 'low',
     assumptions: String((raw && raw.assumptions) || '').slice(0, 400),
+    packaged: normalisePackaged(raw && raw.packaged),
     model: gemini.MODEL,
   };
 }
 
-export const SEARCH_SCHEMA = {
-  type: 'ARRAY',
-  items: {
-    type: 'OBJECT',
-    properties: {
-      name: { type: 'STRING' },
-      cal: { type: 'NUMBER' }, p: { type: 'NUMBER' }, c: { type: 'NUMBER' }, f: { type: 'NUMBER' },
+/** Packaged product with per-100 g/ml values, or null if it isn't one. */
+function normalisePackaged(p) {
+  if (!p || !p.is_packaged || !p.per_100) return null;
+  const txt = (x) => String(x || '').trim().slice(0, 60);
+  const name = txt(p.product_name);
+  if (!name) return null;
+  const qty = (x) => (Number(x) > 0 ? Math.round(clamp(x, 0, 10000)) : null);
+  const n = p.per_100;
+  return {
+    brand: txt(p.brand),
+    name,
+    variant: txt(p.variant),
+    unit: p.unit === 'ml' ? 'ml' : 'g',
+    netQuantity: qty(p.net_quantity),
+    servingSize: qty(p.serving_size),
+    fromLabel: p.values_source === 'label',
+    per100: {
+      calories: Math.round(clamp(n.calories, 0, 900)),
+      protein: round1(clamp(n.protein, 0, 100)),
+      carbs: round1(clamp(n.carbs, 0, 100)),
+      fat: round1(clamp(n.fat, 0, 100)),
     },
-    required: ['name', 'cal', 'p', 'c', 'f'],
-  },
-};
+  };
+}
 
 export const COACH_PERSONA = `You are Coach Byte, an experienced, practical fitness coach inside the ForgeFit app. Speak like a knowledgeable training partner: direct, specific, warm, never corporate. No "As an AI" disclaimers. Ground advice in the user's real data provided below. Keep replies to 2-4 sentences unless asked for detail. You may use <b>bold</b> for key numbers; no other HTML or markdown. You are not a doctor: for pain, injury, illness or medical conditions, recommend a qualified professional.`;

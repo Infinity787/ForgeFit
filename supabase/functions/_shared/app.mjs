@@ -263,24 +263,6 @@ export function createApp({ db, verifyUser, authAdmin, limits = { ai: 60, login:
     return c.json({ ok: true, estimate: ai.normalisePhotoEstimate(raw) });
   });
 
-  app.post('/ai/food-search', requireUser, requireAccount, aiLimit, async (c) => {
-    const body = await readJson(c, 64 * KB);
-    const query = v.text(body.query, 'query', { max: 100 });
-    const raw = await gemini.generateJson({
-      schema: ai.SEARCH_SCHEMA,
-      temperature: 0.2,
-      contents: [{ role: 'user', parts: [{ text: `For the food "${query.replace(/"/g, "'")}", list up to 5 closely related food items with typical nutrition per 100 g: name, cal (kcal), p (protein g), c (carbs g), f (fat g). Give realistic best estimates.` }] }],
-    });
-    const results = (Array.isArray(raw) ? raw : []).slice(0, 5)
-      .filter((r) => r && r.name)
-      .map((r) => ({
-        name: String(r.name).slice(0, 80),
-        cal: Math.round(ai.clamp(r.cal, 0, 1000)),
-        p: ai.round1(ai.clamp(r.p, 0, 100)), c: ai.round1(ai.clamp(r.c, 0, 100)), f: ai.round1(ai.clamp(r.f, 0, 100)),
-      }));
-    return c.json({ ok: true, results });
-  });
-
   app.post('/ai/coach', requireUser, requireAccount, aiLimit, async (c) => {
     const body = await readJson(c, 64 * KB);
     const message = v.text(body.message, 'message', { max: 2000 });

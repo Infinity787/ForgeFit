@@ -1,6 +1,6 @@
 # ForgeFit
 
-Gym and diet coach: workout splits with rest days, set-by-set logging (regular, drop and unilateral sets), a rest timer, progress charts, macro tracking (food library, online search, saved foods, **estimates from a food photo**), diet-plan checklists, steps, and an AI coach that reads your real data.
+Gym and diet coach: workout splits with rest days, set-by-set logging (regular, drop and unilateral sets), a rest timer, progress charts, macro tracking (food library, saved foods, **estimates from a food photo**, including packaged products scaled to the amount you ate), diet-plan checklists, steps, and an AI coach that reads your real data.
 
 It runs as an Android app (Capacitor) and as a website/PWA (Vercel). Both use the same Supabase backend: accounts and email codes through Supabase Auth, data in Postgres, and the API as a Supabase Edge Function.
 

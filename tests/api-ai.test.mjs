@@ -138,14 +138,26 @@ test('AI endpoints require a session', async () => {
   assert.equal((await request(app).post('/api/ai/coach').send({ message: 'hi' })).status, 401);
 });
 
-test('food search returns clamped per-100g results', async () => {
-  nextResponse = { status: 200, text: [{ name: 'Paneer', cal: 265, p: 18.3, c: 1.2, f: 20.8 }, { name: 'Bad', cal: 99999, p: -3, c: 2, f: 1 }] };
-  const res = await request(app).post('/api/ai/food-search').set(auth(user.token)).send({ query: 'paneer' });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.results[0].name, 'Paneer');
-  assert.equal(res.body.results[1].cal, 1000);
-  assert.equal(res.body.results[1].p, 0);
-  assert.equal((await request(app).post('/api/ai/food-search').set(auth(user.token)).send({ query: '' })).status, 400);
+test('packaged products come back with the exact product and per-100 values', async () => {
+  nextResponse = { status: 200, text: {
+    is_food: true, image_quality: 'good', dish_name: 'Protein bar', confidence: 'high',
+    items: [{ name: 'Protein bar', portion: '1 bar', grams: 60, calories: 230, protein: 20, carbs: 22, fat: 8 }],
+    packaged: { is_packaged: true, brand: 'Yoga Bar', product_name: 'Protein Bar', variant: 'Chocolate Brownie', unit: 'g',
+      net_quantity: 60, serving_size: 60, values_source: 'label', per_100: { calories: 383, protein: 33.3, carbs: 36.7, fat: 13.3 } },
+  } };
+  const e = (await photo(JPEG)).body.estimate;
+  assert.deepEqual(e.packaged, {
+    brand: 'Yoga Bar', name: 'Protein Bar', variant: 'Chocolate Brownie', unit: 'g', netQuantity: 60, servingSize: 60,
+    fromLabel: true, per100: { calories: 383, protein: 33.3, carbs: 36.7, fat: 13.3 },
+  });
+  assert.match(calls[0].body.contents[0].parts[1].text, /Packaged products/);
+
+  nextResponse = { status: 200, text: { ...GOOD_ESTIMATE, packaged: { is_packaged: false } } };
+  assert.equal((await photo(JPEG)).body.estimate.packaged, null, 'a plate of food is not a product');
+});
+
+test('food search has been removed', async () => {
+  assert.equal((await request(app).post('/api/ai/food-search').set(auth(user.token)).send({ query: 'paneer' })).status, 404);
 });
 
 test('coach proxies chat with the persona server-side and history starting on a user turn', async () => {

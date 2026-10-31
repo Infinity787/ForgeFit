@@ -628,6 +628,18 @@ input[type=checkbox]{accent-color:var(--fg);}
 .macro-edit{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
 @media (max-width:480px){ .macro-edit{grid-template-columns:repeat(2,minmax(0,1fr));} .photo-pick{grid-template-columns:1fr;} .photo-pick label{min-height:0;flex-direction:row;align-items:center;} }
 .confidence{display:inline-flex;gap:3px;align-items:center;}
+.product-head{margin-top:14px;}
+.product-head__brand{font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);}
+.product-head__name{font-size:20px;font-weight:600;letter-spacing:-0.02em;line-height:1.2;margin-top:3px;}
+.product-head__variant{font-size:14px;color:var(--fg-2);margin-top:2px;}
+.macro-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+.macro-tiles div{background:var(--surface-2);border-radius:10px;padding:10px;}
+.macro-tiles b{display:block;font-family:var(--mono);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-0.03em;}
+.macro-tiles span{font-size:11px;color:var(--fg-3);}
+.macro-tiles--total div{background:var(--raised);box-shadow:0 0 0 1px var(--line-2);}
+#productQtyChips .btn--ghost.active{background:var(--fg);color:var(--on-fg);border-color:var(--fg);}
+.qty-row{display:flex;align-items:center;gap:8px;}
+.qty-row input{width:110px;font-size:18px;font-family:var(--mono);}
 .confidence i{width:14px;height:4px;border-radius:2px;background:var(--line-2);}
 .confidence i.on{background:var(--fg);}
 
@@ -1037,7 +1049,7 @@ input[type=checkbox]{accent-color:var(--fg);}
 <div class="modal-overlay" id="photoModal" role="dialog" aria-modal="true" aria-labelledby="photoTitle">
   <div class="modal-card">
     <div class="modal-card__header">
-      <div><h3 id="photoTitle">Estimate from a photo</h3><div class="sub" id="photoSub">Snap your plate and review the numbers before logging.</div></div>
+      <div><h3 id="photoTitle">Estimate from a photo</h3><div class="sub" id="photoSub">Snap your plate or a packaged product and review the numbers before logging.</div></div>
       <button class="modal-close" onclick="closePhotoModal()" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
     <div class="modal-card__body" id="photoModalBody"></div>
@@ -4663,7 +4675,7 @@ function renderProgress(){
 /* =========================================================
    DIET VIEW
    ========================================================= */
-let dietState = { meal:'Breakfast', filter:'all', search:'', showCustomForm:false, saveCustomFood:false, onlineQuery:'', onlineResults:[], onlineLoading:false, onlineSource:'', onlineError:'' };
+let dietState = { meal:'Breakfast', filter:'all', search:'', showCustomForm:false, saveCustomFood:false };
 const MEAL_TABS = ['Breakfast','Lunch','Snack','Dinner'];
 
 // Foods whose serving is expressed in grams (e.g. "100g cooked", "50g dry", "28g")
@@ -4734,62 +4746,6 @@ function setDietFilter(f){
 function setDietSearch(v){
   dietState.search = v;
   refreshFoodList();
-}
-
-/* ---------- Online food search (Gemini, via the ForgeFit API) ---------- */
-async function searchOnlineFood(){
-  const input = document.getElementById('onlineSearchInput');
-  const query = (input ? input.value : dietState.onlineQuery).trim();
-  if(!query){ if(input) input.focus(); return; }
-  dietState.onlineQuery = query;
-  dietState.onlineLoading = true;
-  dietState.onlineResults = [];
-  dietState.onlineError = '';
-  renderDiet();
-  try {
-    const data = await apiCall('/api/ai/food-search', {query}, undefined, 'POST', {timeoutMs:60000});
-    dietState.onlineResults = (data.results || []).map(r => ({name: r.name, cal: Math.round(r.cal), p: round1(r.p||0), c: round1(r.c||0), f: round1(r.f||0)}));
-    dietState.onlineSearched = true;
-  } catch(e) { dietState.onlineResults = []; dietState.onlineError = e.message || 'Search failed.'; }
-  dietState.onlineLoading = false;
-  renderDiet();
-  const inputAfter = document.getElementById('onlineSearchInput');
-  if(inputAfter) inputAfter.focus();
-}
-function logOnlineFood(name, cal, p, c, f){
-  const user = currentUser();
-  user.mealLogs.push({
-    uid: newId('m'),
-    date: todayStr(), meal: dietState.meal, foodId: null,
-    name, servings: 1, qtyUnit: 'custom', qtyAmount: 100,
-    cal: round1(cal), p: round1(p), c: round1(c), f: round1(f), source:'online'
-  });
-  reportSave(saveCurrentUser(user), name + ' added to ' + dietState.meal + '.');
-  renderDiet();
-}
-function updateOnlineQty(i, cal100, p100, c100, f100){
-  const el = document.getElementById('qty_'+i);
-  if(!el) return;
-  const g = Math.max(1, parseFloat(el.value) || 100);
-  const f = g / 100;
-  const macEl = document.getElementById('omac_'+i);
-  if(macEl) macEl.textContent = Math.round(cal100*f) + ' kcal · P ' + round1(p100*f) + ' · C ' + round1(c100*f) + ' · F ' + round1(f100*f);
-}
-function logOnlineFoodQty(i){
-  const r = dietState.onlineResults[i];
-  if(!r) return;
-  const el = document.getElementById('qty_'+i);
-  const g = el ? Math.max(1, parseFloat(el.value) || 100) : 100;
-  const factor = g / 100;
-  const user = currentUser();
-  user.mealLogs.push({
-    uid: newId('m'),
-    date: todayStr(), meal: dietState.meal, foodId: null,
-    name: r.name + ' (' + g + 'g)', servings: 1, qtyUnit: 'grams', qtyAmount: g,
-    cal: round1(r.cal * factor), p: round1(r.p * factor), c: round1(r.c * factor), f: round1(r.f * factor), source:'online'
-  });
-  reportSave(saveCurrentUser(user), r.name + ' added to ' + dietState.meal + '.');
-  renderDiet();
 }
 
 function renderFoodListHTML(pool){
@@ -5176,27 +5132,6 @@ function renderDiet(){
 
           ${renderSavedFoodsHTML(user)}
 
-          <label class="label" for="onlineSearchInput" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">${icon('globe','i--sm')}Search any food online</label>
-          <div class="cluster" style="flex-wrap:nowrap;margin-bottom:10px;">
-            <input id="onlineSearchInput" class="input" placeholder="chicken biryani, paneer tikka, banana…" value="${escapeHtml(dietState.onlineQuery)}" oninput="dietState.onlineQuery=this.value" onkeydown="if(event.key==='Enter')searchOnlineFood()" style="flex:1;min-width:0;">
-            <button class="btn btn--ghost" type="button" onclick="searchOnlineFood()" ${dietState.onlineLoading ? 'disabled aria-busy="true"' : ''}>${dietState.onlineLoading ? '<span class="spinner"></span>' : icon('search','i--sm')}<span class="hide-sm">Search</span></button>
-          </div>
-          <div id="onlineSearchResults" class="stack" style="gap:6px;margin-bottom:18px;" aria-live="polite">
-            ${dietState.onlineError ? `<div class="notice notice--dashed" style="padding:10px 12px;">${icon('alert','i--sm')}<div class="notice__body small">${escapeHtml(dietState.onlineError)}</div></div>` : ''}
-            ${dietState.onlineResults.length ? `<div class="small faint">AI estimates per 100 g — adjust grams before logging.</div>` + dietState.onlineResults.map((r,i) => `
-              <div class="row" style="padding:9px 8px 9px 12px;align-items:center;">
-                <div class="row__main">
-                  <div class="row__title" style="font-size:13.5px;">${escapeHtml(r.name)}</div>
-                  <div class="row__meta num" id="omac_${i}">${Math.round(r.cal)} kcal · P ${round1(r.p)} · C ${round1(r.c)} · F ${round1(r.f)}</div>
-                </div>
-                <div class="cluster" style="flex-wrap:nowrap;gap:6px;">
-                  <input id="qty_${i}" class="input input--sm input--num" type="number" inputmode="decimal" min="1" step="1" value="100" aria-label="Grams of ${escapeHtml(r.name)}" style="width:62px;" oninput="updateOnlineQty(${i},${r.cal},${r.p},${r.c},${r.f})"><span class="unit">g</span>
-                  <button class="btn btn--primary btn--xs" type="button" onclick="logOnlineFoodQty(${i})">Log</button>
-                </div>
-              </div>
-            `).join('') : (!dietState.onlineLoading && !dietState.onlineError && dietState.onlineSearched && dietState.onlineQuery ? '<div class="muted small">No results. Try a different name.</div>' : '')}
-          </div>
-
           <div class="spread" style="margin-bottom:10px;flex-wrap:wrap;">
             <span class="label">Food library</span>
             <div class="segmented" id="dietFilterTabs" role="group" aria-label="Filter foods">
@@ -5434,7 +5369,7 @@ function resetPhotoState(){
     if(photoState.xhr) try{ photoState.xhr.abort(); }catch(e){}
     if(photoState.previewUrl) URL.revokeObjectURL(photoState.previewUrl);
   }
-  photoState = { stage:'pick', blob:null, previewUrl:null, progress:0, xhr:null, estimate:null, error:'', note:'', form:null, scale:1, meal: dietState.meal, warning:'' };
+  photoState = { stage:'pick', blob:null, previewUrl:null, progress:0, xhr:null, estimate:null, error:'', note:'', form:null, scale:1, meal: dietState.meal, warning:'', product:null, qty:0 };
 }
 
 function openPhotoModal(){
@@ -5483,7 +5418,7 @@ function renderPhotoModal(){
         <input id="photoNote" maxlength="200" placeholder="e.g. cooked in ghee, 2 rotis under the curry" value="${escapeHtml(st.note)}" oninput="photoState.note=this.value">
       </div>
       ${st.error ? `<div class="error-text" role="alert" style="margin-top:12px;">${escapeHtml(st.error)}</div>` : ''}
-      <div class="auth-note" style="margin-top:16px;">${icon('lock','i--sm')}<span>Tips: shoot from above in good light with the whole plate in frame. Your photo is resized on this device, sent securely for analysis by Google Gemini, and deleted right after — it’s never stored.</span></div>
+      <div class="auth-note" style="margin-top:16px;">${icon('lock','i--sm')}<span>Tips: shoot from above in good light with the whole plate in frame. For a packaged product, show the front of the pack (and the nutrition label if you can). Your photo is resized on this device, sent securely for analysis by Google Gemini, and deleted right after — it’s never stored.</span></div>
     `;
     return;
   }
@@ -5510,6 +5445,8 @@ function renderPhotoModal(){
     `;
     return;
   }
+
+  if(st.stage === 'product'){ body.innerHTML = renderProductReview(st); return; }
 
   // review
   const e = st.estimate, f = st.form;
@@ -5696,6 +5633,14 @@ async function uploadPhoto(){
       cal: est.total.calories, p: est.total.protein, c: est.total.carbs, f: est.total.fat
     };
     st.scale = 1;
+    if(est.packaged){
+      const pk = est.packaged;
+      st.product = { ...pk, per100: { ...pk.per100 } };
+      st.qty = pk.servingSize || pk.netQuantity || 100;
+      st.stage = 'product';
+      renderPhotoModal();
+      return;
+    }
     st.stage = 'review';
     renderPhotoModal();
     const nameEl = document.getElementById('pfFoodName');
@@ -5725,6 +5670,131 @@ function updatePhotoMacro(k, raw){
   const v = parseFloat(raw);
   if(isNaN(v) || v < 0) return;
   photoState.form[k] = v / photoState.scale;
+}
+
+/* ---------- Packaged product: macros scale with the quantity eaten ---------- */
+function productTitle(p){
+  return [p.brand, p.name, p.variant].filter(Boolean).join(' ');
+}
+function productMacros(p, qty){
+  const k = (qty || 0) / 100;
+  return { cal: Math.round(p.per100.calories * k), p: round1(p.per100.protein * k), c: round1(p.per100.carbs * k), f: round1(p.per100.fat * k) };
+}
+function macroTilesHTML(m, id){
+  return [['cal','kcal'],['p','protein g'],['c','carbs g'],['f','fat g']].map(([k,l])=>
+    `<div><b${id ? ` id="${id}_${k}"` : ''}>${m[k]}</b><span>${l}</span></div>`).join('');
+}
+function renderProductReview(st){
+  const p = st.product, u = p.unit;
+  const chips = [];
+  if(p.servingSize) chips.push([p.servingSize, '1 serving · ' + p.servingSize + ' ' + u]);
+  if(p.netQuantity && p.netQuantity !== p.servingSize) chips.push([p.netQuantity, 'Whole pack · ' + p.netQuantity + ' ' + u]);
+  if(!chips.some(c=>c[0]===100)) chips.push([100, '100 ' + u]);
+  const per100 = { cal:p.per100.calories, p:p.per100.protein, c:p.per100.carbs, f:p.per100.fat };
+  return `
+    ${st.previewUrl ? `<div class="photo-preview" style="max-height:150px;aspect-ratio:16/7;"><img src="${st.previewUrl}" alt="Your product photo"></div>` : ''}
+    <div class="product-head">
+      <span class="pill" style="height:20px;">Packaged product</span>
+      ${p.brand ? `<div class="product-head__brand" style="margin-top:10px;">${escapeHtml(p.brand)}</div>` : ''}
+      <div class="product-head__name" id="productName">${escapeHtml(p.name)}</div>
+      ${p.variant ? `<div class="product-head__variant">${escapeHtml(p.variant)}</div>` : ''}
+      ${p.netQuantity ? `<div class="small faint" style="margin-top:4px;">Pack size ${p.netQuantity} ${u}</div>` : ''}
+    </div>
+
+    <div class="spread" style="margin:18px 0 8px;">
+      <span class="label">Per 100 ${u}</span>
+      <span class="small faint">${p.fromLabel ? 'Read from the label' : 'Typical values for this product'}</span>
+    </div>
+    <div class="macro-tiles">${macroTilesHTML(per100, 'p100')}</div>
+    <details style="margin-top:8px;">
+      <summary class="small" style="cursor:pointer;color:var(--fg-2);">Values wrong? Edit per 100 ${u}</summary>
+      <div class="macro-edit" style="margin-top:10px;">
+        ${[['calories','Calories','kcal'],['protein','Protein','g'],['carbs','Carbs','g'],['fat','Fat','g']].map(([k,label,unit])=>`
+          <div class="field" style="margin-bottom:0;">
+            <label for="pp_${k}">${label} <span class="opt">${unit}</span></label>
+            <input id="pp_${k}" type="number" inputmode="decimal" min="0" step="${k==='calories'?1:0.1}" value="${p.per100[k]}" oninput="updateProductPer100('${k}', this.value)">
+          </div>`).join('')}
+      </div>
+    </details>
+
+    <div class="field" style="margin:18px 0 0;">
+      <label for="productQty">How much did you have?</label>
+      <div class="qty-row">
+        <input id="productQty" class="input" type="number" inputmode="decimal" min="1" step="1" value="${st.qty}" oninput="setProductQty(this.value)">
+        <span class="unit">${u}</span>
+      </div>
+      <div class="cluster" style="margin-top:10px;gap:6px;" id="productQtyChips">
+        ${chips.map(([v,l])=>`<button type="button" class="btn btn--ghost btn--xs ${st.qty===v?'active':''}" data-qty="${v}" onclick="setProductQty(${v}, true)">${escapeHtml(l)}</button>`).join('')}
+      </div>
+    </div>
+
+    <div class="spread" style="margin:18px 0 8px;">
+      <span class="label">You’re logging</span>
+      <span class="small faint num" id="productQtyLabel">${st.qty} ${u}</span>
+    </div>
+    <div class="macro-tiles macro-tiles--total" aria-live="polite">${macroTilesHTML(productMacros(p, st.qty), 'pt')}</div>
+
+    <div class="field" style="margin:16px 0 0;">
+      <label for="pfMeal">Add to</label>
+      <select id="pfMeal" onchange="photoState.meal=this.value">${MEAL_TABS.map(m=>`<option ${m===st.meal?'selected':''}>${m}</option>`).join('')}</select>
+    </div>
+    <div class="error-text" id="photoFormError" role="alert"></div>
+    <div class="cluster" style="margin-top:16px;flex-wrap:nowrap;">
+      <button class="btn btn--primary" type="button" style="flex:1;" onclick="confirmProductLog()">${icon('check','i--sm')}Add to log</button>
+      <button class="btn btn--ghost" type="button" onclick="retakePhoto()">Retake</button>
+    </div>
+    <button class="link-btn small" type="button" style="margin-top:12px;" onclick="productAsMeal()">Not a packaged product? Estimate it as a meal</button>
+  `;
+}
+// Updates the totals in place so the quantity field keeps focus while typing.
+function refreshProductTotals(){
+  const st = photoState;
+  if(!st || !st.product) return;
+  const m = productMacros(st.product, st.qty);
+  for(const k of ['cal','p','c','f']){ const el = document.getElementById('pt_'+k); if(el) el.textContent = m[k]; }
+  const label = document.getElementById('productQtyLabel');
+  if(label) label.textContent = st.qty + ' ' + st.product.unit;
+  document.querySelectorAll('#productQtyChips button').forEach(b=>b.classList.toggle('active', +b.dataset.qty === st.qty));
+}
+function setProductQty(raw, fromChip){
+  const v = parseFloat(raw);
+  photoState.qty = isNaN(v) || v < 0 ? 0 : round1(v);
+  if(fromChip){ const el = document.getElementById('productQty'); if(el) el.value = photoState.qty; }
+  refreshProductTotals();
+}
+function updateProductPer100(k, raw){
+  const v = parseFloat(raw);
+  if(isNaN(v) || v < 0) return;
+  photoState.product.per100[k] = v;
+  const tile = document.getElementById('p100_' + {calories:'cal',protein:'p',carbs:'c',fat:'f'}[k]);
+  if(tile) tile.textContent = v;
+  refreshProductTotals();
+}
+function productAsMeal(){
+  photoState.stage = 'review';
+  renderPhotoModal();
+}
+function confirmProductLog(){
+  const st = photoState, p = st.product;
+  const err = document.getElementById('photoFormError');
+  err.textContent = '';
+  if(!(st.qty > 0)){ err.textContent = 'Enter how much you had.'; document.getElementById('productQty').focus(); return; }
+  if(st.qty > 10000){ err.textContent = 'That quantity looks too high to log.'; document.getElementById('productQty').focus(); return; }
+  const m = productMacros(p, st.qty);
+  const name = productTitle(p).slice(0, 200);
+  const user = currentUser();
+  user.mealLogs.push({
+    uid: newId('m'),
+    date: todayStr(), meal: st.meal, foodId: null,
+    name, servings: 1, qtyUnit: p.unit, qtyAmount: st.qty,
+    cal: m.cal, p: m.p, c: m.c, f: m.f,
+    source: 'photo'
+  });
+  const meal = st.meal;
+  dietState.meal = meal;
+  closePhotoModal();
+  reportSave(saveCurrentUser(user), p.name + ' added to ' + meal + '.');
+  renderDiet();
 }
 
 function confirmPhotoLog(){
